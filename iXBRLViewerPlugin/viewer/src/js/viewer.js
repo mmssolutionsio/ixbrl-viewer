@@ -65,7 +65,7 @@ export class Viewer {
                     viewer._iframes.each(function (docIndex) { 
                         $(this).data("selected", docIndex == viewer._currentDocumentIndex);
                         const reportIndex = $(this).data("report-index");
-                        viewer._preProcessiXBRL($(this).contents().find("body").get(0), reportIndex, docIndex);
+                        viewer._preProcessiXBRL($(this).contents().find("body").get(0), reportIndex, docIndex, false);
                     });
 
                     /* Call plugin promise for each document in turn */
@@ -108,7 +108,7 @@ export class Viewer {
         if (this._reportSet.isMultiDocumentViewer()) {
             $('#ixv .ixds-tabs').show();
             for (const [i, doc] of this._reportSet.reportFiles().entries()) {
-                $('<div class="tab"></div>')
+                $('<button class="tab"></button>')
                     .text(doc.file)
                     .prop('title', doc.file)
                     .data('ix-doc-id', i)
@@ -123,12 +123,17 @@ export class Viewer {
     // display: block, a div is used, otherwise a span.  Returns the wrapper node
     // as a jQuery node
     _wrapNode(n) {
-        var wrapper = "<span>";
-        const nn = n.getElementsByTagName("*");
-        for (var i = 0; i < nn.length; i++) {
-            if (getComputedStyle(nn[i]).getPropertyValue('display') === "block") {
-                wrapper = '<div>';
-                break;
+        let wrapper = "<span>";
+        if (getComputedStyle(n).getPropertyValue("display") === "block") {
+            wrapper = '<div>';
+        }
+        else {
+            const nn = n.getElementsByTagName("*");
+            for (var i = 0; i < nn.length; i++) {
+                if (getComputedStyle(nn[i]).getPropertyValue('display') === "block") {
+                    wrapper = '<div>';
+                    break;
+                }
             }
         }
         $(n).wrap(wrapper);
@@ -268,7 +273,7 @@ export class Viewer {
                 nodes.push(tableNode)
             } 
         }
-        /* Otherwise, insert a <span> as wrapper */
+        /* Otherwise, insert a <span> or <div> as wrapper */
         if (nodes.length == 0) {
             nodes.push(this._wrapNode(domNode));
         }
@@ -440,7 +445,7 @@ export class Viewer {
                 // Handle SEC/ESEF links-to-hidden
                 const vuid = viewerUniqueId(reportIndex, getIXHiddenLinkStyle(n));
                 if (vuid !== null) {
-                    let nodes = $(n);
+                    let nodes = this._findOrCreateWrapperNode(n, inHidden);
                     nodes.addClass("ixbrl-element").data('ivids', [vuid]);
                     this._docOrderItemIndex.addItem(vuid, docIndex);
                     /* We may have already seen the corresponding ix element in the hidden
@@ -600,7 +605,7 @@ export class Viewer {
     }
 
     clearHighlighting() {
-        $("body", this._iframes.contents()).find(".ixbrl-element, .ixbrl-sub-element").removeClass("ixbrl-selected").removeClass("ixbrl-related").removeClass("ixbrl-linked-highlight");
+        $("body", this._iframes.contents()).find(".ixbrl-element").removeClass("ixbrl-selected").removeClass("ixbrl-related").removeClass("ixbrl-linked-highlight");
     }
 
     _ixIdsForElement(e) {
@@ -697,15 +702,17 @@ export class Viewer {
         return this._ixNodeMap[vuid].wrapperNodes;
     }
 
-    elementsForItemIds(vuids) {
-        return $(vuids.map(vuid => this.elementsForItemId(vuid).get()).flat());
+    // Returns a jQuery node list containing the primary wrapper node for each
+    // vuid provided
+    primaryElementsForItemIds(vuids) {
+        return $(vuids.map(vuid => this.elementsForItemId(vuid).first().get(0)));
     }
 
     /*
      * Add or remove a class to an item (fact or footnote) and any continuation elements
      */
     changeItemClass(vuid, highlightClass, removeClass) {
-        const elements = this.elementsForItemIds([vuid].concat(this.itemContinuationMap[vuid]))
+        const elements = this.primaryElementsForItemIds([vuid].concat(this.itemContinuationMap[vuid]))
         if (removeClass) {
             elements.removeClass(highlightClass);
         }
@@ -749,18 +756,20 @@ export class Viewer {
                     // highlight color for an element that is double tagged in a
                     // table cell.
                     const ixn = $(this).data('ivids').map(id => viewer._ixNodeMap[id]).filter(ixn => !ixn.footnote)[0];
-                    if (ixn != undefined) {
-                        const elements = viewer.elementsForItemIds(ixn.chainIXIds());
-                        const i = groups[reportSet.getItemById(ixn.id).conceptQName().prefix];
-                        if (i !== undefined) {
-                            elements.addClass("ixbrl-highlight-" + i);
+                    if (ixn !== undefined ) {
+                        const item = reportSet.getItemById(ixn.id);
+                        if (item !== undefined) {
+                            const elements = viewer.primaryElementsForItemIds(ixn.chainIXIds());
+                            const i = groups[item.conceptQName().prefix];
+                            if (i !== undefined) {
+                                elements.addClass("ixbrl-highlight-" + i);
+                            }
                         }
                     }
             });
-            $(".ixbrl-sub-element", this._contents).addClass("ixbrl-highlight");
         }
         else {
-            $(".ixbrl-element, .ixbrl-sub-element", this._contents).removeClass(
+            $(".ixbrl-element", this._contents).removeClass(
                 (i, className) => (className.match (/(^|\s)ixbrl-highlight\S*/g) || []).join(' ')
             );
         }
@@ -803,7 +812,10 @@ export class Viewer {
     }
 
     _setTitle(docIndex) {
-        $('#top-bar .document-title').text($('head title', this._iframes.eq(docIndex).contents()).text());
+        const title = $('head title', this._iframes.eq(docIndex).contents()).text();
+        $('#top-bar .document-title')
+            .text(title)
+            .attr("aria-label", "Inline Viewer: " + title);
     }
 
     showDocumentForItemId(vuid) {
