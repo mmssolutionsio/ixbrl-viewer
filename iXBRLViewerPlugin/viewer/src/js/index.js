@@ -9,9 +9,12 @@ $(() => {
     const options = {
         showValidationWarningOnStart: true,
     };
-    const configUrl = new URL("ixbrlviewer.config.json", scriptSrc);
-    if (configUrl.protocol != 'file:') {
-        options["configUrl"] = configUrl;
+
+    if(scriptSrc){
+        const configUrl = new URL("ixbrlviewer.config.json", scriptSrc);
+        if (configUrl.protocol != 'file:') {
+            options["configUrl"] = configUrl;
+        }
     }
 
     const iv = new iXBRLViewer(options);
