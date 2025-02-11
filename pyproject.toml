@@ -1,5 +1,5 @@
 [build-system]
-requires = ["setuptools~=69.0", "wheel~=0.42", "setuptools_scm[toml]~=8.0"]
+requires = ["setuptools>=69,<76", "wheel~=0.42", "setuptools_scm[toml]~=8.0"]
 build-backend = "setuptools.build_meta"
 
 [project]
@@ -19,7 +19,7 @@ classifiers = [
     'License :: OSI Approved :: Apache Software License',
     'Natural Language :: English',
     'Programming Language :: Python :: 3',
-    'Programming Language :: Python :: 3.8',
+    
     'Programming Language :: Python :: 3.9',
     'Programming Language :: Python :: 3.10',
     'Programming Language :: Python :: 3.11',
@@ -27,7 +27,7 @@ classifiers = [
     'Operating System :: OS Independent',
     'Topic :: Text Processing :: Markup :: XML'
 ]
-requires-python = ">=3.8"
+requires-python = ">=3.9"
 dependencies = [
     'lxml>=4,<6'
 ]
@@ -36,10 +36,10 @@ arelle = [
     'arelle_release==2.*',
 ]
 dev = [
-    'flake8==7.1.0',
+    'flake8==7.1.1',
     'lxml-stubs==0.5.1',
-    'mypy==1.10.0',
-    'pytest==8.2.2',
+    'mypy==1.14.1',
+    'pytest==8.3.4',
     'typing-extensions==4.12.2',
 ]
 
