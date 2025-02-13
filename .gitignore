@@ -1,4 +1,6 @@
 node_modules/*
 *.nupkg
 dist
+docs/_build
+docs/source/apidocs
 /.idea
