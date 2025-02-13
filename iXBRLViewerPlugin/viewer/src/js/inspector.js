@@ -445,7 +445,7 @@ export class Inspector {
         this.buildHomeLink()
         this.buildToolbarHighlightMenu();
         this.buildHighlightKey();
-        this.buildUserGuideLink();
+        //this.buildUserGuideLink();
         this.update();
     }
 
