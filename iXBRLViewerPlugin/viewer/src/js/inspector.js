@@ -1592,11 +1592,12 @@ export class Inspector {
         if (localStorageAppLang) {
             return [ localStorageAppLang ];
         }
-        const langs = window.navigator.languages || [ window.navigator.language || window.navigator.userLanguage ] ;
+       /* const langs = window.navigator.languages || [ window.navigator.language || window.navigator.userLanguage ] ;
         if (langs.length == 0 || !langs[0]) {
             return ["en"];
-        }
-        return langs;
+        }*/
+        //return langs;
+        return ["en"];
     }
 
     selectDefaultLanguage() {
