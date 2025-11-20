@@ -3,7 +3,7 @@
 import $ from 'jquery'
 import i18next from 'i18next';
 import jqueryI18next from 'jquery-i18next';
-import {formatNumber, wrapLabel, truncateLabel, runGenerator, SHOW_FACT, HIGHLIGHT_COLORS, viewerUniqueId, GLOSSARY_URL, FEATURE_HOME_LINK_URL, FEATURE_HOME_LINK_LABEL, FEATURE_SEARCH_ON_STARTUP, FEATURE_HIGHLIGHT_FACTS_ON_STARTUP, STORAGE_APP_LANGUAGE, STORAGE_HIGHLIGHT_FACTS, STORAGE_HOME_LINK_QUERY} from "./util.js";
+import {formatNumber, wrapLabel, truncateLabel, runGenerator, SHOW_FACT, HIGHLIGHT_COLORS, viewerUniqueId, GLOSSARY_URL, FEATURE_HOME_LINK_URL, FEATURE_HOME_LINK_LABEL, FEATURE_SEARCH_ON_STARTUP, FEATURE_HIGHLIGHT_FACTS_ON_STARTUP, STORAGE_APP_LANGUAGE, STORAGE_HIGHLIGHT_FACTS, STORAGE_HOME_LINK_QUERY, FEATURE_HIDE_CALCULATION_MODE_OPTION} from "./util.js";
 import { ReportSearch } from "./search.js";
 import { IXBRLChart } from './chart.js';
 import { ViewerOptions } from './viewerOptions.js';
@@ -43,7 +43,7 @@ export class Inspector {
     }
 
     i18nInit() {
-        const langs = ["en", "cy", "es"];
+        const langs = ["cy", "da", "de", "en", "es", "fr", "nl", "uk"];
         const bundles = [
           "translation",
           "referenceParts",
@@ -304,17 +304,12 @@ export class Inspector {
             }
 
             // Options
-            this._optionsMenu.addLabel(i18next.t("menu.options"));
-
-            if (this._reportSet.usesCalculations()) {
+            if (this._reportSet.usesCalculations() && !this._iv.isFeatureEnabled(FEATURE_HIDE_CALCULATION_MODE_OPTION)) {
+                this._optionsMenu.addLabel(i18next.t("menu.options"));
                 this._optionsMenu.addCheckboxItem(i18next.t("calculation.useCalculations11"), (useCalc11) => this.setCalculationMode(useCalc11), "calculation-mode", "select-language", this._useCalc11);
             }
         }
         let helpLinks = {}
-        let guideLinkUrl = this._iv.getGuideLinkUrl();
-        if (guideLinkUrl) {
-            helpLinks[i18next.t("menu.userGuide")] = guideLinkUrl;
-        }
         let supportLinkUrl = this._iv.getSupportLinkUrl();
         if (supportLinkUrl) {
             helpLinks[i18next.t("menu.contactUs")] = supportLinkUrl;
@@ -447,6 +442,7 @@ export class Inspector {
         this.buildHighlightKey();
         //this.buildUserGuideLink();
         this.update();
+        this.search();
     }
 
     inspectorMode(mode, toggle) {
@@ -1596,11 +1592,12 @@ export class Inspector {
         if (localStorageAppLang) {
             return [ localStorageAppLang ];
         }
-        const langs = window.navigator.languages || [ window.navigator.language || window.navigator.userLanguage ] ;
+       /* const langs = window.navigator.languages || [ window.navigator.language || window.navigator.userLanguage ] ;
         if (langs.length == 0 || !langs[0]) {
             return ["en"];
-        }
-        return langs;
+        }*/
+        //return langs;
+        return ["en"];
     }
 
     selectDefaultLanguage() {
