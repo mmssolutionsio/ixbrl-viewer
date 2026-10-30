@@ -1,0 +1,52 @@
+name: Generate Demo Viewer
+
+on:
+  pull_request:
+    branches:
+      - master
+  workflow_dispatch:
+
+concurrency:
+  group: demo-${{ github.event.pull_request.number || github.run_id }}
+  cancel-in-progress: true
+
+permissions: {}
+
+jobs:
+  tests:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v7.0.1
+      - uses: actions/setup-node@v7.1.0
+        with:
+          cache: 'npm'
+          check-latest: true
+          node-version: '26'
+      - name: Install Python 3
+        uses: actions/setup-python@v7.1.0
+        with:
+          cache: 'pip'
+          cache-dependency-path: '**/pyproject.toml'
+          check-latest: true
+          python-version: '3.15'
+      - name: Install Dependencies
+        run: npm ci
+      - name: Install Arelle
+        run: pip install .[arelle]
+      - name: Build viewer js
+        env:
+          GIT_TAG: '0.0.0'
+        run: make prod
+      - name: Generate test viewers
+        shell: bash
+        run: |
+          mkdir demo
+          arelleCmdLine \
+            --plugins "ixbrl-viewer" \
+            -f "tests/playwright/test_filings/filing_documents_smoke_test.zip" \
+            --save-viewer "demo" \
+            --viewer-url "iXBRLViewerPlugin/viewer/dist/ixbrlviewer.js"
+      - uses: actions/upload-artifact@v7.0.2
+        with:
+          name: demo_${{ github.run_id }}.${{ github.run_attempt }}
+          path: demo

@@ -1,7 +1,7 @@
 // See COPYRIGHT.md for copyright information
 
 import $ from 'jquery'
-import writeXlsxFile from 'write-excel-file'
+import writeXlsxFile from 'write-excel-file/browser'
 import { Fact } from './fact.js';
 
 
@@ -253,9 +253,6 @@ export class TableExport {
 
 
         const excelData = this._writeTable(data);
-        writeXlsxFile(excelData.data, {
-            columns: excelData.columns,
-            fileName: 'table.xlsx'
-        });
+        writeXlsxFile(excelData.data, {columns: excelData.columns}).toFile('table.xlsx');
     }
 }

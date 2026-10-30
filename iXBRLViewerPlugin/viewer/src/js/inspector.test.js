@@ -1,8 +1,12 @@
 // See COPYRIGHT.md for copyright information
 
+import $ from 'jquery';
 import { ReportSet } from "./reportset.js";
+import { ReportSetOutline } from "./outline.js";
+import { IXNode } from "./ixnode.js";
+import { Menu } from "./menu.js";
 import { TestInspector } from "./test-utils.js";
-import { NAMESPACE_ISO4217, SHOW_FACT, viewerUniqueId } from "./util.js";
+import { NAMESPACE_ISO4217, SHOW_FACT, viewerUniqueId, FACTS_PER_GROUP, ZOOM_LEVELS } from "./util.js";
 
 
 const testReportData = {
@@ -41,6 +45,13 @@ const testReportData = {
     "rels": {},
 };
 
+function testViewer() {
+    return {
+        documentCount: () => 1,
+        getTitle: () => "Document title",
+    };
+}
+
 function testReport(facts, ixData) {
     // Deep copy of standing data
     const data = JSON.parse(JSON.stringify(testReportData));
@@ -55,7 +66,7 @@ function fromFact(value) {
                 "v": value,
                 "a": {
                     "c": "eg:Concept1",
-                    "u": "iso4217:USD", 
+                    "u": "iso4217:USD",
                     "p": "2017-01-01/2018-01-01",
                 }};
     return testReport({"f1": factData}, {"f1": {} }).getItemById("0-f1");
@@ -66,10 +77,10 @@ function toFact(value) {
                 "v": value,
                 "a": {
                     "c": "eg:Concept1",
-                    "u": "iso4217:USD", 
+                    "u": "iso4217:USD",
                     "p": "2018-01-01/2019-01-01",
                 }};
-    
+
     return testReport({"f1": factData}, {"f1": {} }).getItemById("0-f1");
 }
 
@@ -105,6 +116,7 @@ describe("Scales filter options", () => {
                 "c": "eg:Concept1",
                 "u": isMonetary ? "iso4217:USD" : "test:shares",
                 "p": "2018-01-01/2019-01-01",
+                "e": "eg:1234",
             },
         };
     }
@@ -136,25 +148,25 @@ describe("Scales filter options", () => {
             ...monetaryFactData,
             ...nonMonetaryFactData,
         }, ixData);
-        insp.initialize(reportSet)
+        insp.initialize(reportSet, testViewer());
         insp.i18nInit();
         const scalesOptions = insp._getScalesOptions();
-        expect(scalesOptions).toEqual({
-            "1": "Tens",
-            "2": "Hundreds",
-            "3": "Thousands",
-            "4": "Ten Thousands",
-            "5": "Hundred Thousands",
-            "6": "Millions",
-            "7": "Ten Millions",
-            "8": "Hundred Millions",
-            "9": "Billions",
-            "10": "10",
-            "-1": "Tenths",
-            "-2": "Cents, Hundredths",
-            "-3": "Thousandths",
-            "-4": "-4",
-        });
+        expect(scalesOptions).toEqual([
+              { value: '1', label: 'Tens' },
+              { value: '2', label: 'Hundreds' },
+              { value: '3', label: 'Thousands' },
+              { value: '4', label: 'Ten Thousands' },
+              { value: '5', label: 'Hundred Thousands' },
+              { value: '6', label: 'Millions' },
+              { value: '7', label: 'Ten Millions' },
+              { value: '8', label: 'Hundred Millions' },
+              { value: '9', label: 'Billions' },
+              { value: '10', label: '10' },
+              { value: '-1', label: 'Tenths' },
+              { value: '-2', label: 'Cents, Hundredths' },
+              { value: '-3', label: 'Thousandths' },
+              { value: '-4', label: '-4' }
+        ]);
     })
 
     test("Scales filter options with only monetary facts", () => {
@@ -162,52 +174,52 @@ describe("Scales filter options", () => {
         const reportSet = testReport({
             ...monetaryFactData,
         }, ixData);
-        insp.initialize(reportSet)
+        insp.initialize(reportSet, testViewer());
         insp.i18nInit();
         const scalesOptions = insp._getScalesOptions();
-        expect(scalesOptions).toEqual({
-            "1": "Tens",
-            "2": "Hundreds",
-            "3": "Thousands",
-            "4": "Ten Thousands",
-            "5": "Hundred Thousands",
-            "6": "Millions",
-            "7": "Ten Millions",
-            "8": "Hundred Millions",
-            "9": "Billions",
-            "10": "10",
-            "-1": "Tenths",
-            "-2": "Cents",
-            "-3": "Thousandths",
-            "-4": "-4",
-        });
-    })
+        expect(scalesOptions).toEqual([
+              { value: '1', label: 'Tens' },
+              { value: '2', label: 'Hundreds' },
+              { value: '3', label: 'Thousands' },
+              { value: '4', label: 'Ten Thousands' },
+              { value: '5', label: 'Hundred Thousands' },
+              { value: '6', label: 'Millions' },
+              { value: '7', label: 'Ten Millions' },
+              { value: '8', label: 'Hundred Millions' },
+              { value: '9', label: 'Billions' },
+              { value: '10', label: '10' },
+              { value: '-1', label: 'Tenths' },
+              { value: '-2', label: 'Cents' },
+              { value: '-3', label: 'Thousandths' },
+              { value: '-4', label: '-4' }
+        ]);
+    });
 
     test("Scales filter options with only non-monetary facts", () => {
         const insp = new TestInspector();
         const reportSet = testReport({
             ...nonMonetaryFactData,
         }, ixData);
-        insp.initialize(reportSet)
+        insp.initialize(reportSet, testViewer());
         insp.i18nInit();
         const scalesOptions = insp._getScalesOptions();
-        expect(scalesOptions).toEqual({
-            "1": "Tens",
-            "2": "Hundreds",
-            "3": "Thousands",
-            "4": "Ten Thousands",
-            "5": "Hundred Thousands",
-            "6": "Millions",
-            "7": "Ten Millions",
-            "8": "Hundred Millions",
-            "9": "Billions",
-            "10": "10",
-            "-1": "Tenths",
-            "-2": "Hundredths",
-            "-3": "Thousandths",
-            "-4": "-4",
-        });
-    })
+        expect(scalesOptions).toEqual([
+              { value: '1', label: 'Tens' },
+              { value: '2', label: 'Hundreds' },
+              { value: '3', label: 'Thousands' },
+              { value: '4', label: 'Ten Thousands' },
+              { value: '5', label: 'Hundred Thousands' },
+              { value: '6', label: 'Millions' },
+              { value: '7', label: 'Ten Millions' },
+              { value: '8', label: 'Hundred Millions' },
+              { value: '9', label: 'Billions' },
+              { value: '10', label: '10' },
+              { value: '-1', label: 'Tenths' },
+              { value: '-2', label: 'Hundredths' },
+              { value: '-3', label: 'Thousandths' },
+              { value: '-4', label: '-4' }
+        ]);
+    });
 });
 
 describe("Fact deep link", () => {
@@ -247,6 +259,94 @@ describe("Fact deep link", () => {
         insp.handleFactDeepLink();
         expect(mockSelect).not.toHaveBeenCalled();
     })
+});
+
+describe("doInitialSelection", () => {
+    const setUpInspector = (searchOnStartup, hasOutline = false) => {
+        const insp = new TestInspector();
+        insp._iv.setFeatures({ "search_on_startup": searchOnStartup }, "");
+        insp.outline = { hasOutline: jest.fn(() => hasOutline) };
+        insp.inspectorMode = jest.fn();
+        return insp;
+    };
+
+    test("enters search mode when search_on_startup is enabled and no deep link is present", () => {
+        const insp = setUpInspector(true);
+        insp._currentItem = undefined;
+        insp.doInitialSelection();
+        expect(insp.inspectorMode).toHaveBeenCalledWith("search-mode");
+    });
+
+    test("enters fact-mode when search_on_startup is disabled", () => {
+        const insp = setUpInspector(false);
+        insp._currentItem = undefined;
+        insp.doInitialSelection();
+        expect(insp.inspectorMode).toHaveBeenCalledWith("fact-mode");
+    });
+
+    test("adds show-facts-by-group class when the outline has an outline and search_on_startup is disabled", () => {
+        const insp = setUpInspector(false, true);
+        insp._currentItem = undefined;
+        $("#inspector").remove();
+        $(document.body).append('<div id="inspector"></div>');
+        insp.doInitialSelection();
+        expect($("#inspector").hasClass("show-facts-by-group")).toBe(true);
+    });
+
+    test("uses the deep-linked fact when one is present, regardless of search_on_startup", () => {
+        const insp = setUpInspector(true);
+        insp._currentItem = { some: "fact" };
+        insp.doInitialSelection();
+        expect(insp.inspectorMode).not.toHaveBeenCalled();
+    });
+});
+
+describe("highlightTagsOnStartup", () => {
+    afterEach(() => {
+        window.localStorage.clear();
+    });
+
+    test("returns true when highlight_facts_on_startup is enabled and no stored preference exists", () => {
+        const insp = new TestInspector();
+        insp._iv.setFeatures({ "highlight_facts_on_startup": true }, "");
+        expect(insp.highlightTagsOnStartup()).toBe(true);
+    });
+
+    test("returns false when highlight_facts_on_startup is disabled and no stored preference exists", () => {
+        const insp = new TestInspector();
+        insp._iv.setFeatures({ "highlight_facts_on_startup": false }, "");
+        expect(insp.highlightTagsOnStartup()).toBe(false);
+    });
+});
+
+describe("Calculation mode setting visibility", () => {
+    beforeAll(() => {
+        return new TestInspector().i18nInit();
+    });
+
+    const setUpInspector = (usesCalculations10, hideCalculationModeOption) => {
+        const insp = new TestInspector();
+        insp._iv.setFeatures({ "hide_calculation_mode_option": hideCalculationModeOption }, "");
+        insp._reportSet = { usesCalculations10: jest.fn(() => usesCalculations10) };
+        $(document.body).append('<table><tbody><tr class="section"><td><select id="setting-calculation-mode"></select></td></tr></tbody></table>');
+        return insp;
+    };
+
+    afterEach(() => {
+        $("#setting-calculation-mode").closest(".section").remove();
+    });
+
+    test("hides calc-mode section when hide_calculation_mode_option is enabled", () => {
+        const insp = setUpInspector(true, true);
+        insp.buildSettingsPage();
+        expect($("#setting-calculation-mode").closest(".section").css("display")).toBe("none");
+    });
+
+    test("shows calc-mode section when hide_calculation_mode_option is disabled and report uses calculations 1.0", () => {
+        const insp = setUpInspector(true, false);
+        insp.buildSettingsPage();
+        expect($("#setting-calculation-mode").closest(".section").css("display")).not.toBe("none");
+    });
 });
 
 describe("Handle message", () => {
@@ -304,13 +404,15 @@ describe("Handle message", () => {
         });
         insp.handleMessage(event);
         expect(mockSelect).toHaveBeenCalledWith("0-");
-    })
+    });
     test("Invalid task", () => {
         mockSelect.mockClear();
         const event = generateEvent({
             task: "INVALID_TASK",
         });
-        insp.handleMessage(event);
+        jest.spyOn(console, 'log').withImplementation(() => {}, () => {
+            insp.handleMessage(event);
+        });
         expect(mockSelect).not.toHaveBeenCalled();
     })
     test("Invalid JSON", () => {
@@ -326,4 +428,1015 @@ describe("Handle message", () => {
         insp.handleMessage(event);
         expect(mockSelect).not.toHaveBeenCalled();
     })
+});
+
+describe("Facts by group", () => {
+    const groupReportData = {
+        prefixes: {
+            eg: "http://www.example.com",
+        },
+        concepts: {
+            "eg:Root1": { labels: { std: { en: "Root 1" } } },
+            "eg:LineItem1": { labels: { std: { en: "Line Item 1" } } },
+            "eg:LineItem2": { labels: { std: { en: "Line Item 2" } } },
+        },
+        roles: {
+            elr1: "http://www.example.com/elr1",
+            elr2: "http://www.example.com/elr2",
+        },
+        roleDefs: {
+            elr1: { en: "001 Group 1" },
+            elr2: { en: "002 Group 2" },
+        },
+        rels: {
+            pres: {
+                elr1: { "eg:Root1": [{ t: "eg:LineItem1" }] },
+                elr2: { "eg:Root1": [{ t: "eg:LineItem2" }] },
+            },
+        },
+        facts: {},
+        languages: {},
+    };
+
+    // insertionOrder controls the key order of the "facts" object (and thus
+    // reportSet.facts() order); docOrder controls the order IXNode objects
+    // are constructed in, which determines document order (docOrderindex).
+    function buildGroupReportSet(insertionOrder, docOrder, conceptOf, target) {
+        const data = JSON.parse(JSON.stringify(groupReportData));
+        data.target = target ?? null;
+        data.facts = {};
+        for (const id of insertionOrder) {
+            data.facts[id] = { a: { c: conceptOf(id), p: "2019-01-01" } };
+        }
+        return withIXNodes(new ReportSet(data), docOrder);
+    }
+
+    function withIXNodes(reportSet, docOrder) {
+        const ixNodeMap = {};
+        for (const id of docOrder) {
+            ixNodeMap[viewerUniqueId(0, id)] = new IXNode(id, $('<span></span>'));
+        }
+        reportSet.setIXNodeMap(ixNodeMap);
+        return reportSet;
+    }
+
+    function conceptOf(id) {
+        return id.startsWith("f1") ? "eg:LineItem1" : "eg:LineItem2";
+    }
+
+    function buildTwoReportSet() {
+        function targetReport(elr, factId, concept) {
+            const data = JSON.parse(JSON.stringify(groupReportData));
+            for (const other of ["elr1", "elr2"].filter(e => e !== elr)) {
+                delete data.roles[other];
+                delete data.roleDefs[other];
+                delete data.rels.pres[other];
+            }
+            data.facts = { [factId]: { a: { c: concept, p: "2019-01-01" } } };
+            return data;
+        }
+        const reportSet = new ReportSet({
+            sourceReports: [ { targetReports: [
+                targetReport("elr1", "fa", "eg:LineItem1"),
+                targetReport("elr2", "fb", "eg:LineItem2"),
+            ] } ]
+        });
+        return withIXNodes(reportSet, ["fa", "fb"]);
+    }
+
+    function buildParentheticalReportSet() {
+        const data = JSON.parse(JSON.stringify(groupReportData));
+        data.roleDefs = {
+            elr1: { en: "001 Group 1 (Parenthetical)" },
+            elr2: { en: "002 Group 2 (Parenthetical)" },
+        };
+        const ids = ["f1", "f2"];
+        for (const id of ids) {
+            data.facts[id] = { a: { c: conceptOf(id), p: "2019-01-01" } };
+        }
+        return withIXNodes(new ReportSet(data), ids);
+    }
+
+    function setUpInspector(reportSet) {
+        const insp = new TestInspector();
+        insp._reportSet = reportSet;
+        insp.outline = new ReportSetOutline(reportSet);
+        $("#ixv, #inspector").remove();
+        $(document.body).append(`
+            <div id="ixv">
+              <div id="inspector" class="show-facts-by-group">
+                <div class="inspector-container fact-inspector">
+                  <div class="section section-list-controls">
+                    <div class="section-list-title" data-i18n="inspector.fact-groups">Sections</div>
+                    <div class="section-list-buttons">
+                      <button id="collapse-all-sections" aria-disabled="true" data-i18n="inspector.collapseAllSections">Collapse all</button>
+                      <button id="expand-all-sections" aria-disabled="true" data-i18n="inspector.expandAllSections">Expand all</button>
+                    </div>
+                  </div>
+                  <div class="inspector-body">
+                    <div class="facts-by-group"></div>
+                  </div>
+                </div>
+              </div>
+            </div>
+        `);
+        $("#ixv").localize();
+        insp.initializeCollapsibleSections();
+        insp.initializeSectionListControls();
+        return insp;
+    }
+
+    function sections() {
+        return $("#inspector .facts-by-group .collapsible-section");
+    }
+
+    function headerButton(index) {
+        return sections().eq(index).find("> .collapsible-header button:first-of-type");
+    }
+
+    function sectionLabel(index) {
+        return headerButton(index).find(".section-label");
+    }
+
+    function sectionFactCount(index) {
+        return headerButton(index).find(".section-fact-count");
+    }
+
+    function sectionTargetDocument(index) {
+        return headerButton(index).find(".section-target-document");
+    }
+
+    function collapsedFlags() {
+        return sections().map((_, el) => $(el).hasClass("collapsed")).get();
+    }
+
+    function bulkButton(action) {
+        return $(`#${action}-all-sections`);
+    }
+
+    function ariaDisabled(action) {
+        return bulkButton(action).attr("aria-disabled");
+    }
+
+    beforeAll(() => {
+        $.fx.off = true;
+        return new TestInspector().i18nInit();
+    });
+
+    afterAll(() => {
+        $.fx.off = false;
+    });
+
+    test("only renders facts belonging to the specified group, even when fact-array order differs from document order", () => {
+        // Insertion order into reportSet.facts() puts f2 (an elr2 fact)
+        // between f1 and f1a (both elr1), even though document order is
+        // f1, f1a, f2. This reproduces the bug where index-based slicing of
+        // reportSet.facts() pulled in facts from other groups.
+        const reportSet = buildGroupReportSet(["f1", "f2", "f1a"], ["f1", "f1a", "f2"], conceptOf);
+        const insp = setUpInspector(reportSet);
+
+        insp.buildFactListByGroup();
+
+        const groupBodies = $("#inspector .facts-by-group .collapsible-body");
+        const elr1Body = groupBodies.eq(0);
+        const renderedIds = elr1Body.find(".fact-list-item").map((_, el) => $(el).data("ivid")).get();
+        expect(renderedIds).not.toContain(viewerUniqueId(0, "f2"));
+    });
+
+    test("includes the last fact in the group (no off-by-one)", () => {
+        const reportSet = buildGroupReportSet(["f1", "f2", "f1a"], ["f1", "f1a", "f2"], conceptOf);
+        const insp = setUpInspector(reportSet);
+
+        insp.buildFactListByGroup();
+
+        const elr1Body = $("#inspector .facts-by-group .collapsible-body").eq(0);
+        const renderedIds = elr1Body.find(".fact-list-item").map((_, el) => $(el).data("ivid")).get();
+        expect(renderedIds).toEqual([viewerUniqueId(0, "f1"), viewerUniqueId(0, "f1a")]);
+    });
+
+    test("paginates a group's facts with a show-more button", () => {
+        const ids = [];
+        for (let i = 0; i < FACTS_PER_GROUP + 5; i++) {
+            ids.push(`f1-${i}`);
+        }
+        const reportSet = buildGroupReportSet(ids, ids, () => "eg:LineItem1");
+        const insp = setUpInspector(reportSet);
+
+        insp.buildFactListByGroup();
+
+        const body = $("#inspector .facts-by-group .collapsible-body").eq(0);
+        expect(body.find(".fact-list-item").length).toBe(FACTS_PER_GROUP - 1);
+        expect(body.find(".show-more").length).toBe(1);
+
+        body.find(".show-more").trigger("click");
+
+        expect(body.find(".fact-list-item").length).toBe(ids.length);
+        expect(body.find(".show-more").length).toBe(0);
+    });
+
+    test("builds every section collapsed, reporting aria-expanded=false", () => {
+        const reportSet = buildGroupReportSet(["f1", "f2"], ["f1", "f2"], conceptOf);
+        const insp = setUpInspector(reportSet);
+
+        insp.buildFactListByGroup();
+
+        expect(sections().length).toBe(2);
+        sections().each((_, el) => {
+            expect($(el).hasClass("collapsed")).toBe(true);
+        });
+        expect(headerButton(0).attr("aria-expanded")).toBe("false");
+        expect(headerButton(1).attr("aria-expanded")).toBe("false");
+    });
+
+    test("clicking a section header expands that section and only that section", () => {
+        const reportSet = buildGroupReportSet(["f1", "f2"], ["f1", "f2"], conceptOf);
+        const insp = setUpInspector(reportSet);
+        insp.buildFactListByGroup();
+
+        headerButton(0).trigger("click");
+
+        expect(sections().eq(0).hasClass("collapsed")).toBe(false);
+        expect(headerButton(0).attr("aria-expanded")).toBe("true");
+        expect(sections().eq(1).hasClass("collapsed")).toBe(true);
+        expect(headerButton(1).attr("aria-expanded")).toBe("false");
+    });
+
+    test("clicking an expanded section header collapses it again", () => {
+        const reportSet = buildGroupReportSet(["f1", "f2"], ["f1", "f2"], conceptOf);
+        const insp = setUpInspector(reportSet);
+        insp.buildFactListByGroup();
+
+        headerButton(0).trigger("click");
+        headerButton(0).trigger("click");
+
+        expect(sections().eq(0).hasClass("collapsed")).toBe(true);
+        expect(headerButton(0).attr("aria-expanded")).toBe("false");
+    });
+
+    test("a section header shows its role label and its fact count", () => {
+        const reportSet = buildGroupReportSet(["f1", "f1a", "f2"], ["f1", "f1a", "f2"], conceptOf);
+        const insp = setUpInspector(reportSet);
+
+        insp.buildFactListByGroup();
+
+        expect(sectionLabel(0).text()).toBe("001 Group 1");
+        expect(sectionFactCount(0).text()).toBe("2");
+        expect(sectionFactCount(1).text()).toBe("1");
+    });
+
+    test("the header count is the section's full fact count, not the number of rendered rows", () => {
+        const ids = [];
+        for (let i = 0; i < FACTS_PER_GROUP + 5; i++) {
+            ids.push(`f1-${i}`);
+        }
+        const reportSet = buildGroupReportSet(ids, ids, () => "eg:LineItem1");
+        const insp = setUpInspector(reportSet);
+
+        insp.buildFactListByGroup();
+
+        const body = $("#inspector .facts-by-group .collapsible-body").eq(0);
+        expect(body.find(".fact-list-item").length).toBe(FACTS_PER_GROUP - 1);
+        expect(sectionFactCount(0).text()).toBe(String(ids.length));
+    });
+
+    test("the header count announces itself as a number of facts", () => {
+        const reportSet = buildGroupReportSet(["f1", "f1a", "f2"], ["f1", "f1a", "f2"], conceptOf);
+        const insp = setUpInspector(reportSet);
+
+        insp.buildFactListByGroup();
+
+        expect(sectionFactCount(0).attr("aria-label")).toBe("2 facts");
+        expect(sectionFactCount(1).attr("aria-label")).toBe("1 fact");
+    });
+
+    test("a section header carries its report's target document name", () => {
+        const reportSet = buildGroupReportSet(["f1", "f2"], ["f1", "f2"], conceptOf, "frs102");
+        const insp = setUpInspector(reportSet);
+
+        insp.buildFactListByGroup();
+
+        expect(sectionTargetDocument(0).text()).toBe("frs102");
+        expect(sectionTargetDocument(1).text()).toBe("frs102");
+    });
+
+    test("a section header of a default-target report has no target document element at all", () => {
+        const reportSet = buildGroupReportSet(["f1", "f2"], ["f1", "f2"], conceptOf);
+        const insp = setUpInspector(reportSet);
+
+        insp.buildFactListByGroup();
+
+        expect(sectionTargetDocument(0).length).toBe(0);
+    });
+
+    test("the target document name sits between the role label and the fact count", () => {
+        const reportSet = buildGroupReportSet(["f1", "f2"], ["f1", "f2"], conceptOf, "frs102");
+        const insp = setUpInspector(reportSet);
+
+        insp.buildFactListByGroup();
+
+        const parts = headerButton(0).children();
+        expect(parts.index(sectionLabel(0))).toBeLessThan(parts.index(sectionTargetDocument(0)));
+        expect(parts.index(sectionTargetDocument(0))).toBeLessThan(parts.index(sectionFactCount(0)));
+    });
+
+    test("the toolbar labels its title and its buttons", () => {
+        const reportSet = buildGroupReportSet(["f1", "f2"], ["f1", "f2"], conceptOf);
+        const insp = setUpInspector(reportSet);
+
+        insp.buildFactListByGroup();
+
+        expect(sections().length).toBe(2);
+        expect(bulkButton("collapse").text()).toBe("Collapse all");
+        expect(bulkButton("expand").text()).toBe("Expand all");
+    });
+
+    test("Expand all expands every section, and Collapse all collapses every section", () => {
+        const reportSet = buildGroupReportSet(["f1", "f2"], ["f1", "f2"], conceptOf);
+        const insp = setUpInspector(reportSet);
+        insp.buildFactListByGroup();
+
+        bulkButton("expand").trigger("click");
+
+        expect(collapsedFlags()).toEqual([false, false]);
+        expect(headerButton(0).attr("aria-expanded")).toBe("true");
+        expect(headerButton(1).attr("aria-expanded")).toBe("true");
+
+        bulkButton("collapse").trigger("click");
+
+        expect(collapsedFlags()).toEqual([true, true]);
+        expect(headerButton(0).attr("aria-expanded")).toBe("false");
+        expect(headerButton(1).attr("aria-expanded")).toBe("false");
+    });
+
+    test("Expand all expands a section a reader had already expanded by hand", () => {
+        const reportSet = buildGroupReportSet(["f1", "f2"], ["f1", "f2"], conceptOf);
+        const insp = setUpInspector(reportSet);
+        insp.buildFactListByGroup();
+        headerButton(0).trigger("click");
+
+        bulkButton("expand").trigger("click");
+
+        expect(collapsedFlags()).toEqual([false, false]);
+    });
+
+    test("a freshly built section list offers Expand all and reports Collapse all as unavailable", () => {
+        const reportSet = buildGroupReportSet(["f1", "f2"], ["f1", "f2"], conceptOf);
+        const insp = setUpInspector(reportSet);
+
+        insp.buildFactListByGroup();
+
+        expect(ariaDisabled("collapse")).toBe("true");
+        expect(ariaDisabled("expand")).toBe("false");
+    });
+
+    test("each bulk toggle reports itself unavailable once it has nothing left to do", () => {
+        const reportSet = buildGroupReportSet(["f1", "f2"], ["f1", "f2"], conceptOf);
+        const insp = setUpInspector(reportSet);
+        insp.buildFactListByGroup();
+
+        bulkButton("expand").trigger("click");
+
+        expect(ariaDisabled("expand")).toBe("true");
+        expect(ariaDisabled("collapse")).toBe("false");
+
+        bulkButton("collapse").trigger("click");
+
+        expect(ariaDisabled("collapse")).toBe("true");
+        expect(ariaDisabled("expand")).toBe("false");
+    });
+
+    test("expanding the last collapsed section by hand makes Expand all unavailable", () => {
+        const reportSet = buildGroupReportSet(["f1", "f2"], ["f1", "f2"], conceptOf);
+        const insp = setUpInspector(reportSet);
+        insp.buildFactListByGroup();
+
+        headerButton(0).trigger("click");
+
+        expect(ariaDisabled("expand")).toBe("false");
+
+        headerButton(1).trigger("click");
+
+        expect(ariaDisabled("expand")).toBe("true");
+        expect(ariaDisabled("collapse")).toBe("false");
+    });
+
+    test("collapsing the last expanded section by hand makes Collapse all unavailable", () => {
+        const reportSet = buildGroupReportSet(["f1", "f2"], ["f1", "f2"], conceptOf);
+        const insp = setUpInspector(reportSet);
+        insp.buildFactListByGroup();
+        bulkButton("expand").trigger("click");
+
+        headerButton(0).trigger("click");
+
+        expect(ariaDisabled("collapse")).toBe("false");
+
+        headerButton(1).trigger("click");
+
+        expect(ariaDisabled("collapse")).toBe("true");
+        expect(ariaDisabled("expand")).toBe("false");
+    });
+
+    test("clicking an unavailable bulk button does nothing", () => {
+        const reportSet = buildGroupReportSet(["f1", "f2"], ["f1", "f2"], conceptOf);
+        const insp = setUpInspector(reportSet);
+        insp.buildFactListByGroup();
+        const setAll = jest.spyOn(insp, "setAllSectionsCollapsed");
+
+        bulkButton("collapse").trigger("click");
+
+        expect(setAll).not.toHaveBeenCalled();
+        expect(collapsedFlags()).toEqual([true, true]);
+    });
+
+    test("toggling a collapsible section outside the section list leaves the bulk buttons alone", () => {
+        const reportSet = buildGroupReportSet(["f1", "f2"], ["f1", "f2"], conceptOf);
+        const insp = setUpInspector(reportSet);
+        insp.buildFactListByGroup();
+        $("#ixv").append(`
+            <div class="collapsible-section static">
+              <h3 class="collapsible-header"><button aria-expanded="true">Labels</button></h3>
+              <div class="collapsible-body">Labels body</div>
+            </div>
+        `);
+
+        $("#ixv .collapsible-section.static .collapsible-header button").trigger("click");
+
+        expect(ariaDisabled("collapse")).toBe("true");
+        expect(ariaDisabled("expand")).toBe("false");
+    });
+
+    test("both bulk buttons are unavailable when every presentation group is filtered out", () => {
+        const insp = setUpInspector(buildParentheticalReportSet());
+        expect(insp.outline.hasOutline()).toBe(true);
+
+        insp.buildFactListByGroup();
+
+        expect(sections().length).toBe(0);
+        expect(ariaDisabled("collapse")).toBe("true");
+        expect(ariaDisabled("expand")).toBe("true");
+    });
+
+    test("the bulk buttons cover sections from every report", () => {
+        const insp = setUpInspector(buildTwoReportSet());
+        insp.buildFactListByGroup();
+
+        expect(sections().length).toBe(2);
+
+        bulkButton("expand").trigger("click");
+
+        expect(collapsedFlags()).toEqual([false, false]);
+
+        bulkButton("collapse").trigger("click");
+
+        expect(collapsedFlags()).toEqual([true, true]);
+    });
+
+    test("alternating bulk clicks replace an in-flight slide rather than stacking animations", () => {
+        $.fx.off = false;
+        try {
+            const reportSet = buildGroupReportSet(["f1", "f2"], ["f1", "f2"], conceptOf);
+            const insp = setUpInspector(reportSet);
+            insp.buildFactListByGroup();
+
+            bulkButton("expand").trigger("click");
+            bulkButton("collapse").trigger("click");
+            bulkButton("expand").trigger("click");
+
+            const queued = sections()
+                .map((_, el) => $.queue($(el).find("> .collapsible-body").get(0), "fx").length)
+                .get();
+            expect(queued).toEqual([1, 1]);
+        }
+        finally {
+            sections().find("> .collapsible-body").finish();
+            $.fx.tick();
+            $.fx.off = true;
+        }
+    });
+
+    test("a section paged out with show more keeps every row across a bulk round trip", () => {
+        const ids = [];
+        for (let i = 0; i < FACTS_PER_GROUP + 5; i++) {
+            ids.push(`f1-${i}`);
+        }
+        const reportSet = buildGroupReportSet(ids, ids, () => "eg:LineItem1");
+        const insp = setUpInspector(reportSet);
+        insp.buildFactListByGroup();
+        const body = $("#inspector .facts-by-group .collapsible-body").eq(0);
+        body.find(".show-more").trigger("click");
+
+        bulkButton("collapse").trigger("click");
+        bulkButton("expand").trigger("click");
+
+        expect(body.find(".fact-list-item").length).toBe(ids.length);
+        expect(body.find(".show-more").length).toBe(0);
+    });
+});
+
+describe("inspectorMode fact details scroll", () => {
+    beforeEach(() => {
+        $("#ixv, #inspector").remove();
+        $(document.body).append(`
+            <div id="ixv">
+              <div id="inspector" class="show-facts-by-group">
+                <div class="inspector-container fact-inspector">
+                  <div class="inspector-body"></div>
+                </div>
+              </div>
+            </div>
+        `);
+    });
+
+    afterEach(() => {
+        $("#ixv, #inspector").remove();
+    });
+
+    test("opening fact details resets the inspector body to the top", () => {
+        const insp = new TestInspector();
+        expect(insp._factListScrollTop).toBeUndefined();
+        const body = $("#inspector .fact-inspector > .inspector-body");
+        body.scrollTop(500);
+        expect(body.scrollTop()).toBe(500);
+
+        insp.inspectorMode("fact-mode", true);
+
+        expect(body.scrollTop()).toBe(0);
+        expect($("#inspector").hasClass("show-facts-by-group")).toBe(false);
+    });
+
+    test("returning to the fact list does not reset inspector body scroll", () => {
+        const insp = new TestInspector();
+        insp.outline = { hasOutline: () => true };
+        const body = $("#inspector .fact-inspector > .inspector-body");
+        body.scrollTop(500);
+
+        insp.inspectorMode("fact-mode", false);
+
+        expect(body.scrollTop()).toBe(500);
+        expect($("#inspector").hasClass("show-facts-by-group")).toBe(true);
+    });
+
+    test("returning to the fact list restores the scroll saved when opening details", () => {
+        const insp = new TestInspector();
+        insp.outline = { hasOutline: () => true };
+        insp._curInspectorMode = "fact-mode";
+        const body = $("#inspector .fact-inspector > .inspector-body");
+        body.scrollTop(500);
+
+        insp.inspectorMode("fact-mode", true);
+        expect(body.scrollTop()).toBe(0);
+        expect($("#inspector").hasClass("show-facts-by-group")).toBe(false);
+
+        insp.inspectorMode("fact-mode");
+        expect($("#inspector").hasClass("show-facts-by-group")).toBe(true);
+        expect(body.scrollTop()).toBe(500);
+        expect(insp._factListScrollTop).toBeUndefined();
+    });
+
+    test("search then XBRL facts returns to details at the top; a second XBRL facts click restores the list scroll", () => {
+        const insp = new TestInspector();
+        insp.outline = { hasOutline: () => true };
+        insp._curInspectorMode = "fact-mode";
+        const body = $("#inspector .fact-inspector > .inspector-body");
+        body.scrollTop(500);
+
+        insp.inspectorMode("fact-mode", true);
+        insp.inspectorMode("search-mode");
+        expect($("#inspector").hasClass("show-facts-by-group")).toBe(false);
+        expect(body.scrollTop()).toBe(0);
+
+        insp.inspectorMode("fact-mode");
+        expect($("#inspector").hasClass("show-facts-by-group")).toBe(false);
+        expect(body.scrollTop()).toBe(0);
+
+        insp.inspectorMode("fact-mode");
+        expect($("#inspector").hasClass("show-facts-by-group")).toBe(true);
+        expect(body.scrollTop()).toBe(500);
+    });
+
+    test("clicking XBRL facts while already on the list does not restore a stale list scroll", () => {
+        const insp = new TestInspector();
+        insp.outline = { hasOutline: () => true };
+        insp._curInspectorMode = "fact-mode";
+        const body = $("#inspector .fact-inspector > .inspector-body");
+        body.scrollTop(500);
+
+        insp.inspectorMode("fact-mode", true);
+        insp.inspectorMode("fact-mode");
+        body.scrollTop(800);
+        insp.inspectorMode("fact-mode");
+
+        expect($("#inspector").hasClass("show-facts-by-group")).toBe(true);
+        expect(body.scrollTop()).toBe(800);
+    });
+});
+
+describe("Collapsible sections", () => {
+    function setUpSections() {
+        const insp = new TestInspector();
+        $("#ixv").remove();
+        $(document.body).append(`
+            <div id="ixv">
+              <div class="collapsible-section first">
+                <h3 class="collapsible-header"><button aria-expanded="true">First</button></h3>
+                <div class="collapsible-body">First body</div>
+              </div>
+              <div class="collapsible-section second">
+                <h3 class="collapsible-header"><button aria-expanded="true">Second</button></h3>
+                <div class="collapsible-body">Second body</div>
+              </div>
+            </div>
+        `);
+        insp.initializeCollapsibleSections();
+        return insp;
+    }
+
+    function headerButton(section) {
+        return $(`#ixv .collapsible-section.${section} .collapsible-header button`);
+    }
+
+    beforeAll(() => {
+        $.fx.off = true;
+    });
+
+    afterAll(() => {
+        $.fx.off = false;
+    });
+
+    test("clicking a header collapses that section and flips its aria-expanded", () => {
+        setUpSections();
+
+        headerButton("first").trigger("click");
+
+        expect($("#ixv .collapsible-section.first").hasClass("collapsed")).toBe(true);
+        expect(headerButton("first").attr("aria-expanded")).toBe("false");
+        expect($("#ixv .collapsible-section.first .collapsible-body").css("display")).toBe("none");
+    });
+
+    test("clicking a collapsed header expands it again", () => {
+        setUpSections();
+
+        headerButton("first").trigger("click");
+        headerButton("first").trigger("click");
+
+        expect($("#ixv .collapsible-section.first").hasClass("collapsed")).toBe(false);
+        expect(headerButton("first").attr("aria-expanded")).toBe("true");
+        expect($("#ixv .collapsible-section.first .collapsible-body").css("display")).not.toBe("none");
+    });
+
+    test("clicking a header leaves sibling sections alone", () => {
+        setUpSections();
+
+        headerButton("first").trigger("click");
+
+        expect($("#ixv .collapsible-section.second").hasClass("collapsed")).toBe(false);
+        expect(headerButton("second").attr("aria-expanded")).toBe("true");
+    });
+
+    test("keeps the body shown inline while it slides shut", () => {
+        $.fx.off = false;
+        try {
+            setUpSections();
+
+            headerButton("first").trigger("click");
+
+            const body = $("#ixv .collapsible-section.first .collapsible-body");
+            expect(body.get(0).style.display).toBe("block");
+        }
+        finally {
+            $.fx.off = true;
+        }
+    });
+
+    test("collapsing a section authored expanded leaves no inline display residue on expand", () => {
+        setUpSections();
+
+        headerButton("first").trigger("click");
+        headerButton("first").trigger("click");
+
+        const body = $("#ixv .collapsible-section.first .collapsible-body");
+        expect(body.get(0).style.height).toBe("");
+        expect(body.get(0).style.display).not.toBe("none");
+    });
+});
+
+describe("_populateFileSummary", () => {
+    const emptyDocuments = {
+        inline: [],
+        schema: [],
+        calcLinkbase: [],
+        defLinkbase: [],
+        labelLinkbase: [],
+        presLinkbase: [],
+        refLinkbase: [],
+        unrecognizedLinkbase: [],
+    };
+
+    const buildSummaryDom = () => $(`
+        <div>
+          <div class="collapsible-section files-summary">
+            <div class="collapsible-body">
+              <ul class="plain-list files-summary-list"></ul>
+            </div>
+          </div>
+        </div>
+    `);
+
+    test("hides the files summary section when there are no local documents", () => {
+        const insp = new TestInspector();
+        insp.summary = { getLocalDocuments: () => emptyDocuments };
+        const summaryDom = buildSummaryDom();
+
+        insp._populateFileSummary(summaryDom);
+
+        expect(summaryDom.find(".files-summary").css("display")).toBe("none");
+    });
+
+    test("shows the files summary section when there are local documents", () => {
+        const insp = new TestInspector();
+        insp.summary = {
+            getLocalDocuments: () => ({
+                ...emptyDocuments,
+                inline: ["report.html"],
+            }),
+        };
+        const summaryDom = buildSummaryDom();
+
+        insp._populateFileSummary(summaryDom);
+
+        expect(summaryDom.find(".files-summary").css("display")).not.toBe("none");
+        expect(summaryDom.find(".files-summary-list li").text()).toBe("report.html");
+    });
+});
+
+describe("Plugin extension points", () => {
+    const menuFixture = (id) => $(`
+        <div class="menu" id="${id}">
+          <button class="menu-title"></button>
+          <div class="content-container">
+            <div class="content"></div>
+          </div>
+        </div>
+    `);
+
+    test("extendDisplayOptionsMenu is invoked on registered plugins and rendered menu items appear in the DOM", () => {
+        const insp = new TestInspector();
+        const plugin = {
+            extendDisplayOptionsMenu: jest.fn((menu) => {
+                menu.addCheckboxItem("Plugin option", () => {}, "plugin-option");
+                menu.addLink("Plugin link", "https://example.com");
+            }),
+        };
+        insp._iv.registerPlugin(plugin);
+        insp._optionsMenu = new Menu(menuFixture("display-options-menu"));
+
+        insp.buildDisplayOptionsMenu();
+
+        expect(plugin.extendDisplayOptionsMenu).toHaveBeenCalledWith(insp._optionsMenu);
+        const items = insp._optionsMenu._elt.find(".content .item");
+        expect(items).toHaveLength(2);
+        expect(items.eq(0).text()).toBe("Plugin option");
+        expect(items.eq(1).text()).toBe("Plugin link");
+        expect(items.eq(1).attr("href")).toBe("https://example.com");
+    });
+
+    test("extendToolbarHighlightMenu is invoked on registered plugins and rendered menu items appear in the DOM", () => {
+        const insp = new TestInspector();
+        const plugin = {
+            extendToolbarHighlightMenu: jest.fn((menu) => {
+                menu.addCheckboxItem("Untagged Facts", () => {}, "highlight-untagged-facts");
+            }),
+        };
+        insp._iv.registerPlugin(plugin);
+        insp._toolbarMenu = new Menu(menuFixture("toolbar-highlight-menu"));
+
+        insp.buildToolbarHighlightMenu();
+
+        expect(plugin.extendToolbarHighlightMenu).toHaveBeenCalledWith(insp._toolbarMenu);
+        const items = insp._toolbarMenu._elt.find(".content .item");
+        expect(items).toHaveLength(1);
+        expect(items.eq(0).text()).toBe("Untagged Facts");
+    });
+});
+
+describe("Zoom boundary clamping", () => {
+    const setUpInspector = () => {
+        const insp = new TestInspector();
+        insp._viewer = { zoom: jest.fn() };
+        return insp;
+    };
+
+    test("zoomRelative does not go below the minimum zoom level", () => {
+        const insp = setUpInspector();
+        insp._zoomLevel = 0;
+        insp.zoomRelative(-1);
+        expect(insp._zoomLevel).toBe(0);
+        expect(insp._viewer.zoom).toHaveBeenCalledWith(ZOOM_LEVELS[0]);
+    });
+
+    test("zoomRelative does not go above the maximum zoom level", () => {
+        const insp = setUpInspector();
+        insp._zoomLevel = ZOOM_LEVELS.length - 1;
+        insp.zoomRelative(1);
+        expect(insp._zoomLevel).toBe(ZOOM_LEVELS.length - 1);
+        expect(insp._viewer.zoom).toHaveBeenCalledWith(ZOOM_LEVELS[ZOOM_LEVELS.length - 1]);
+    });
+
+    test("zoomRelative moves one step within bounds", () => {
+        const insp = setUpInspector();
+        insp._zoomLevel = 5;
+        insp.zoomRelative(1);
+        expect(insp._zoomLevel).toBe(6);
+        expect(insp._viewer.zoom).toHaveBeenCalledWith(ZOOM_LEVELS[6]);
+    });
+
+    test("zoomAbsolute sets the zoom level to the given index", () => {
+        const insp = setUpInspector();
+        insp.zoomAbsolute("3");
+        expect(insp._zoomLevel).toBe(3);
+        expect(insp._viewer.zoom).toHaveBeenCalledWith(ZOOM_LEVELS[3]);
+    });
+
+    test("zoomAbsolute clamps an index below the minimum zoom level", () => {
+        const insp = setUpInspector();
+        insp.zoomAbsolute("-1");
+        expect(insp._zoomLevel).toBe(0);
+        expect(insp._viewer.zoom).toHaveBeenCalledWith(ZOOM_LEVELS[0]);
+    });
+
+    test("zoomAbsolute clamps an index above the maximum zoom level", () => {
+        const insp = setUpInspector();
+        insp.zoomAbsolute(String(ZOOM_LEVELS.length));
+        expect(insp._zoomLevel).toBe(ZOOM_LEVELS.length - 1);
+        expect(insp._viewer.zoom).toHaveBeenCalledWith(ZOOM_LEVELS[ZOOM_LEVELS.length - 1]);
+    });
+});
+
+describe("_populateDownloadsSummary", () => {
+    const buildSummaryDom = () => $(`
+        <div>
+          <div class="collapsible-section downloads-summary">
+            <div class="bordered-section filing-documents">
+              <a class="download-link" href=""></a>
+            </div>
+          </div>
+        </div>
+    `);
+
+    test("sets the download link href on the .filing-documents element when present", () => {
+        const insp = new TestInspector();
+        insp._reportSet = { filingDocuments: () => "https://example.com/documents.zip" };
+        const summaryDom = buildSummaryDom();
+
+        insp._populateDownloadsSummary(summaryDom);
+
+        expect(summaryDom.find(".filing-documents .download-link").attr("href")).toBe("https://example.com/documents.zip");
+        expect(summaryDom.find(".filing-documents").css("display")).not.toBe("none");
+        expect(summaryDom.find(".downloads-summary").css("display")).not.toBe("none");
+    });
+
+    test("hides the .filing-documents element when there are no filing documents", () => {
+        const insp = new TestInspector();
+        insp._reportSet = { filingDocuments: () => undefined };
+        const summaryDom = buildSummaryDom();
+
+        insp._populateDownloadsSummary(summaryDom);
+
+        expect(summaryDom.find(".filing-documents").css("display")).toBe("none");
+        expect(summaryDom.find(".downloads-summary").css("display")).toBe("none");
+    });
+});
+
+describe("Mobile inspector pane", () => {
+    const realMatchMedia = window.matchMedia;
+    let mediaListeners;
+    let mediaMatches;
+
+    function mockMatchMedia(matches) {
+        mediaMatches = matches;
+        mediaListeners = [];
+        window.matchMedia = jest.fn(() => ({
+            get matches() { return mediaMatches; },
+            addEventListener: (type, listener) => mediaListeners.push(listener),
+        }));
+    }
+
+    function mobileInspector(matches) {
+        mockMatchMedia(matches);
+        const insp = new TestInspector();
+        insp._reportSet = { getItemById: jest.fn(() => ({})) };
+        insp._viewer = {
+            showItemById: jest.fn(),
+            highlightItem: jest.fn(),
+            clearHighlighting: jest.fn(),
+        };
+        insp.update = jest.fn();
+        insp.outline = { hasOutline: () => false };
+        insp.initializeMobileLayout();
+        return insp;
+    }
+
+    beforeEach(() => {
+        $(document.body).append(`
+            <div id="ixv">
+              <button id="inspector-toggle"></button>
+              <nav id="inspector-tabs"><button id="inspector-close"></button></nav>
+              <div id="inspector"></div>
+            </div>
+        `);
+    });
+
+    afterEach(() => {
+        $("#ixv").remove();
+        window.matchMedia = realMatchMedia;
+    });
+
+    test("toggle and close buttons open and close the pane on mobile", () => {
+        mobileInspector(true);
+        expect($("#ixv").hasClass("inspector-open")).toBe(false);
+        $("#inspector-toggle").trigger("click");
+        expect($("#ixv").hasClass("inspector-open")).toBe(true);
+        $("#inspector-toggle").trigger("click");
+        expect($("#ixv").hasClass("inspector-open")).toBe(false);
+        $("#inspector-toggle").trigger("click");
+        $("#inspector-close").trigger("click");
+        expect($("#ixv").hasClass("inspector-open")).toBe(false);
+    });
+
+    test("openPane is a no op on the desktop layout", () => {
+        const insp = mobileInspector(false);
+        insp.openPane();
+        expect($("#ixv").hasClass("inspector-open")).toBe(false);
+        $("#inspector-toggle").trigger("click");
+        expect($("#ixv").hasClass("inspector-open")).toBe(false);
+    });
+
+    test("selecting an item opens the pane, deselecting does not", () => {
+        const insp = mobileInspector(true);
+        insp.selectItem(null);
+        expect($("#ixv").hasClass("inspector-open")).toBe(false);
+        insp.selectItem("0-f1");
+        expect($("#ixv").hasClass("inspector-open")).toBe(true);
+    });
+
+    test("selecting an item from inside the open pane keeps it open", () => {
+        const insp = mobileInspector(true);
+        insp.openPane();
+        insp.selectItem("0-f1", undefined, undefined, true);
+        expect($("#ixv").hasClass("inspector-open")).toBe(true);
+    });
+
+    test("settings cog opens the pane and closing settings returns to the document", () => {
+        const insp = mobileInspector(true);
+        insp.inspectorMode("fact-mode");
+        insp.toggleSettingsMode();
+        expect($("#ixv").hasClass("inspector-open")).toBe(true);
+        expect($("#ixv").hasClass("settings-mode")).toBe(true);
+        insp.closeSettingsMode();
+        expect($("#ixv").hasClass("inspector-open")).toBe(false);
+        expect($("#ixv").hasClass("fact-mode")).toBe(true);
+    });
+
+    test("closing settings keeps the pane open if it was already open", () => {
+        const insp = mobileInspector(true);
+        insp.inspectorMode("fact-mode");
+        insp.openPane();
+        insp.toggleSettingsMode();
+        insp.closeSettingsMode();
+        expect($("#ixv").hasClass("inspector-open")).toBe(true);
+    });
+
+    test("overlay follows the visual viewport while pinched", () => {
+        const insp = mobileInspector(true);
+        $("#ixv").append('<div id="pane-right"></div>');
+        const realVisualViewport = window.visualViewport;
+        window.visualViewport = { offsetTop: 100, offsetLeft: 40, width: 195, height: 422, addEventListener: () => {} };
+        const pane = $("#pane-right").get(0);
+
+        // A closed pane is left alone
+        insp.positionPane();
+        expect(pane.style.top).toBe("");
+
+        insp.openPane();
+        expect(pane.style.top).toBe("100px");
+        expect(pane.style.left).toBe("40px");
+        expect(pane.style.width).toBe("195px");
+        expect(pane.style.height).toBe("422px");
+
+        // Back on the desktop layout the stylesheet takes over again
+        mediaMatches = false;
+        insp.positionPane();
+        expect(pane.style.top).toBe("");
+        expect(pane.style.width).toBe("");
+        window.visualViewport = realVisualViewport;
+    });
+
+    test("pane closes when the layout returns to desktop width", () => {
+        const insp = mobileInspector(true);
+        insp.openPane();
+        expect($("#ixv").hasClass("inspector-open")).toBe(true);
+        mediaMatches = false;
+        mediaListeners.forEach(l => l({ matches: false }));
+        expect($("#ixv").hasClass("inspector-open")).toBe(false);
+    });
 });

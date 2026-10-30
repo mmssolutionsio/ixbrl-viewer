@@ -1,7 +1,7 @@
 // See COPYRIGHT.md for copyright information
 
 import $ from 'jquery'
-import { numberMatchSearch } from './number-matcher.js'
+import { isNumberOrDate, numberMatchSearch } from './number-matcher.js'
 import { TableExport } from './tableExport.js'
 import { IXNode } from './ixnode.js';
 import { getIXHiddenLinkStyle, runGenerator, viewerUniqueId, HIGHLIGHT_COLORS } from './util.js';
@@ -31,8 +31,9 @@ export class Viewer {
         this.onMouseLeave = $.Callbacks();
 
         this._ixNodeMap = {};
-        this._docOrderItemIndex = new DocOrderIndex();
+        this.docOrderItemIndex = new DocOrderIndex();
         this._currentDocumentIndex = 0;
+        this._highlightAllPrepared = false;
     }
 
     _checkContinuationCount() {
@@ -78,13 +79,8 @@ export class Viewer {
                             if (viewer._iv.isReviewModeEnabled()) {
                                 await new Promise((resolve, _) => {
                                     viewer._iv.setProgress("Finding untagged numbers and dates").then(() => {
-                                        // Temporarily hide all children of "body" to avoid constant
-                                        // re-layouts when wrapping untagged numbers
-                                        const children = $(body).children(':visible');
-                                        children.hide();
                                         $(body).addClass("review");
-                                        viewer._wrapUntaggedNumbers($(body), docIndex, false);
-                                        children.show();
+                                        viewer._wrapUntaggedNumbers(body);
                                         resolve();
                                     });
                                 });
@@ -97,7 +93,6 @@ export class Viewer {
                             this._applyStyles();
                             this._bindHandlers();
                             this.scale = 1;
-                            this._setTitle(0);
                             this._addDocumentSetTabs();
                             resolve();
                         });
@@ -121,35 +116,61 @@ export class Viewer {
         }
     }
 
-    // Wrap a DOM node in a div or span.  If the node or any descendent has
-    // display: block, a div is used, otherwise a span.  Returns the wrapper node
-    // as a jQuery node
+    // Choose or insert a node to use as the "wrapper" for the given ix node.
+    // This node will be used for highlighting and selection styling.
+    //
+    // If, ignoring whitespace-only text nodes, the child only has element
+    // children, use those nodes as the wrappers.
+    //
+    // Otherwise, insert a wrapper node around the element.  If the node or any
+    // descendent has display: block, a div is used, otherwise a span.  This
+    // includes elements with no content at all (e.g. nil facts), which would
+    // otherwise have no wrapper and so could not be highlighted or located.
+    //
+    // We want to avoid adding wrapper nodes around inline-block children, as
+    // wrapping in block or inline-block can interfere with layout (e.g. some
+    // documents have used inline-block to create a multi-column layout).
+    //
+    // Returns an array of the chosen nodes as DOM nodes.
+    //
     _wrapNode(n) {
-        let wrapper = "<span>";
-        if (getComputedStyle(n).getPropertyValue("display") === "block") {
-            wrapper = '<div>';
-        }
-        else {
-            const nn = n.getElementsByTagName("*");
-            for (var i = 0; i < nn.length; i++) {
-                if (getComputedStyle(nn[i]).getPropertyValue('display') === "block") {
-                    wrapper = '<div>';
-                    break;
+        const childNodes = Array.from(n.childNodes);
+        const elementChildren = childNodes.filter(n => n.nodeType === Node.ELEMENT_NODE);
+        const hasText = childNodes.some(n => n.nodeType === Node.TEXT_NODE && !/^\s*$/.test(n.nodeValue));
+        if (hasText || elementChildren.length === 0) {
+            let wrapper = "<span>";
+            if (getComputedStyle(n).getPropertyValue("display") === "block") {
+                wrapper = '<div>';
+            }
+            else {
+                const nn = n.getElementsByTagName("*");
+                for (var i = 0; i < nn.length; i++) {
+                    if (getComputedStyle(nn[i]).getPropertyValue('display') === "block") {
+                        wrapper = '<div>';
+                        break;
+                    }
                 }
             }
+            $(n).wrap(wrapper);
+            if (!hasText) {
+                n.parentNode.classList.add("ixbrl-no-content");
+            }
+            return [n.parentNode];
         }
-        $(n).wrap(wrapper);
-        return n.parentNode;
+        else {
+            return elementChildren;
+        }
     }
 
 
-    _wrapUntaggedNumbers(n, docIndex, ignoreFullMatch) {
-        const viewer = this;
+    _wrapUntaggedNumbers(n) {
         const ixHiddenStyleRE = /(?:^|\s|;)-(?:sec|esef)-ix-hidden:\s*([^\s;]+)/;
 
-        n.contents().each(function () {
-            if (this.nodeType === Node.ELEMENT_NODE) {
-                const name = localName(this.nodeName.toUpperCase());
+        for (let node = n.firstChild, next; node !== null; node = next) {
+            // Capture the next sibling first because wrapping replaces text nodes.
+            next = node.nextSibling;
+            if (node.nodeType === Node.ELEMENT_NODE) {
+                const name = localName(node.nodeName.toUpperCase());
                 /*
                  * Content in text tags should not be considered tagged, so carry
                  * on searching if it's not:
@@ -158,49 +179,49 @@ export class Viewer {
                  *  2. nonNumerics with a format (mostly dates, not a text block)
                  *  3. an element with a -sec-ix-hidden style.  This shouldn't be
                  *     used on a text block, so we assume it's a more specific tag.
-                 *
-                 *  When we continue searching, if the element is a nonNumeric tag
-                 *  and it's entire contents match the number matcher, we consider
-                 *  that tagged.
+                 *  4. a nonNumeric whose entire content is a single number or
+                 *     date, which is a tagged value rather than a text block.
                  *
                  */
                 if (!(
                         name === 'NONFRACTION' ||
-                        (name === 'NONNUMERIC' && this.getAttribute('format') !== null) ||
-                        (this.hasAttribute('style') && this.getAttribute('style').match(ixHiddenStyleRE))
+                        (name === 'NONNUMERIC' && (node.getAttribute('format') !== null || isNumberOrDate(node.textContent.trim()))) ||
+                        (node.hasAttribute('style') && node.getAttribute('style').match(ixHiddenStyleRE))
                 )) {
-                    viewer._wrapUntaggedNumbers($(this), docIndex, name === 'NONNUMERIC');
+                    this._wrapUntaggedNumbers(node);
                 }
             }
-            else if (this.nodeType === Node.TEXT_NODE) {
-                const input = this.nodeValue;
-                const output = $("<div></div>");
-                let pos = 0;
-                numberMatchSearch(input, function (m, do_not_want, is_date) {
-                    if (m.index > pos) {
-                        output.append(document.createTextNode(input.substring(pos, m.index)));
-                    }
-                    // If "ignoreFullMatch" is specified, we ignore a match which
-                    // covers the whole of n's text content.
-                    if (do_not_want ||
-                            (ignoreFullMatch && m.index === 0 && m.index + m[0].length === input.length && input === n.text())) {
-                        output.append(document.createTextNode(m[0]));
-                    }
-                    else {
-                        const c = is_date ? 'review-untagged-date' : 'review-untagged-number';
-                        $('<span></span>')
-                                .text(m[0])
-                                .addClass(c)
-                                .appendTo(output);
-                    }
-                    pos = m.index + m[0].length;
-                });
-                if (pos < input.length) {
-                    output.append(document.createTextNode(input.substring(pos, input.length)));
-                }
-                $(this).replaceWith(output.contents());
+            else if (node.nodeType === Node.TEXT_NODE) {
+                this._wrapUntaggedTextNode(node);
             }
+        }
+    }
+
+    _wrapUntaggedTextNode(node) {
+        const input = node.nodeValue;
+        const doc = node.ownerDocument;
+        let output = null;
+        let pos = 0;
+        numberMatchSearch(input, (m, is_date) => {
+            if (output === null) {
+                output = doc.createDocumentFragment();
+            }
+            if (m.index > pos) {
+                output.appendChild(doc.createTextNode(input.substring(pos, m.index)));
+            }
+            const span = doc.createElement('span');
+            span.className = is_date ? 'review-untagged-date' : 'review-untagged-number';
+            span.textContent = m[0];
+            output.appendChild(span);
+            pos = m.index + m[0].length;
         });
+        if (output === null) {
+            return;
+        }
+        if (pos < input.length) {
+            output.appendChild(doc.createTextNode(input.substring(pos)));
+        }
+        node.replaceWith(output);
     }
 
     /*
@@ -264,49 +285,59 @@ export class Viewer {
          * so, use that as the wrapper element.
          * Check for 'display: table-cell' to avoid using hidden cells */
         const tableNode = domNode.closest("td,th");
-        const nodes = [];
+        let nodes;
         const innerText = $(domNode).text();
-        if (tableNode !== null && getComputedStyle(tableNode).display === 'table-cell' && innerText.length > 0) {
+        if (tableNode !== null && getComputedStyle(tableNode).display === 'table-cell') {
             // Use indexOf rather than a single regex because innerText may
             // be too long for the regex engine 
             const outerText = $(tableNode).text();
             const start = outerText.indexOf(innerText);
             const wrapper = outerText.substring(0, start) + outerText.substring(start + innerText.length);
             if (!/[0-9A-Za-z]/.test(wrapper)) {
-                nodes.push(tableNode)
+                nodes = [ tableNode ];
             } 
         }
         /* Otherwise, insert a <span> or <div> as wrapper */
-        if (nodes.length == 0) {
-            nodes.push(this._wrapNode(domNode));
+        if (nodes === undefined) {
+            nodes = this._wrapNode(domNode);
         }
-        // Create a list of the wrapper node, and all absolutely positioned descendants.
-        for (const e of nodes[0].querySelectorAll("*")) { 
-            if (getComputedStyle(e).getPropertyValue('position') === "absolute") { 
-                nodes.push(e);
-            } 
+        // Batch style reads before applying class updates to avoid repeated layout recalculation.
+        const subNodeLists = [];
+        for (const node of nodes) {
+            const absoluteSubNodes = [];
+            for (const subNode of node.querySelectorAll("*")) {
+                if (getComputedStyle(subNode).getPropertyValue('position') === "absolute") {
+                    absoluteSubNodes.push(subNode);
+                }
+            }
+            subNodeLists.push(absoluteSubNodes);
         }
-        for (const [i, n] of nodes.entries()) {
-            // getBoundingClientRect blocks on layout, so only do it if we've actually got absolute nodes
-            if (nodes.length > 1) {
-                n.classList.add("ixbrl-contains-absolute");
+        const allNodes = [];
+        for (const [i, node] of nodes.entries()) {
+            const absoluteSubNodes = subNodeLists[i];
+            allNodes.push(node);
+            node.classList.add("ixbrl-element");
+            for (const subNode of absoluteSubNodes) {
+                subNode.classList.add("ixbrl-sub-element");
+                allNodes.push(subNode);
             }
-            if (i == 0) {
-                n.classList.add("ixbrl-element");
-            }
-            else {
-                n.classList.add("ixbrl-sub-element");
+            if (absoluteSubNodes.length > 0) {
+                node.classList.add("ixbrl-contains-absolute");
             }
         }
-        return $(nodes);
+        return $(allNodes);
     }
 
 
     // Adds the specified ID to the "ivids" data list on the given node
-    _addIdToNode(node, id) {
-        const ivids = node.data('ivids') || [];
-        ivids.push(id);
-        node.data('ivids', ivids);
+    _addIdToNodes(nodes, id) {
+        nodes.filter(".ixbrl-element").each((i, e) => {
+            const ivids = $(e).data('ivids') || [];
+            if (!ivids.includes(id)) {
+                ivids.push(id);
+            }
+            $(e).data('ivids', ivids);
+        });
     }
 
     _buildContinuationMaps() {
@@ -377,8 +408,14 @@ export class Viewer {
     //   .ixbrl-element-hidden an ix: element inside ix:hidden
     //
     // Additional classes:
-    //   .ixbrl-no-highlight   a zero-height .ixbrl-element - no highlighting or 
-    //                         borders applied
+    //   .ixbrl-no-highlight   a zero-height .ixbrl-element whose content is
+    //                         absolutely positioned and highlighted via
+    //                         .ixbrl-sub-element - no highlighting or borders
+    //                         applied to the wrapper itself
+    //   .ixbrl-no-content     a wrapper inserted around an element with no
+    //                         content (e.g. a nil fact), so there is nothing
+    //                         else to highlight - given a marker so that it
+    //                         can be seen and clicked
     //   .ixbrl-element-nonfraction,
     //   .ixbrl-element-nonnumeric,
     //   .ixbrl-continuation, 
@@ -392,7 +429,7 @@ export class Viewer {
     //
     // Viewer._ixNodeMap is a map of these IDs to IXNode objects.
     //
-    // Viewer._docOrderItemIndex is a DocOrderIndex object that maintains a list of
+    // Viewer.docOrderItemIndex is a DocOrderIndex object that maintains a list of
     // fact and footnotes in document order.
     //
     _preProcessiXBRL(n, reportIndex, docIndex, inHidden) {
@@ -402,16 +439,23 @@ export class Viewer {
         const isNonNumeric = name === 'NONNUMERIC';
         const isNonFraction = name === 'NONFRACTION';
         const isFact = isNonNumeric || isNonFraction;
-        if (n.nodeType === 1) {
+
+        if (n.nodeType === Node.ELEMENT_NODE && name == 'HIDDEN') {
+            inHidden = true;
+        }
+        // Depth-first so we can re-use child wrapper nodes
+        this._preProcessChildNodes(n, reportIndex, docIndex, inHidden);
+
+        if (n.nodeType === Node.ELEMENT_NODE) {
             const vuid = viewerUniqueId(reportIndex, n.getAttribute("id"));
             if (isFact || isFootnote) {
                 // If @id is not present, it must be for a target document that wasn't processed.
                 if (n.hasAttribute("id")) {
                     let nodes = this._findOrCreateWrapperNode(n, inHidden);
 
-                    this._addIdToNode(nodes.first(), vuid);
+                    this._addIdToNodes(nodes, vuid);
                     let ixn = this._getOrCreateIXNode(vuid, nodes, docIndex, inHidden);
-                    this._docOrderItemIndex.addItem(vuid, docIndex);
+                    this.docOrderItemIndex.addItem(vuid, docIndex);
 
                     if (isNonFraction) {
                         nodes.addClass("ixbrl-element-nonfraction");
@@ -440,15 +484,12 @@ export class Viewer {
                     let nodes = this._findOrCreateWrapperNode(n, inHidden);
 
                     // For a continuation, store the IX ID(s) of the item(s), not the continuation
-                    this._addIdToNode(nodes.first(), this.continuationOfMap[vuid]);
+                    this._addIdToNodes(nodes, this.continuationOfMap[vuid]);
 
                     this._getOrCreateIXNode(vuid, nodes, docIndex, inHidden);
 
                     nodes.addClass("ixbrl-continuation");
                 }
-            }
-            else if(name == 'HIDDEN') {
-                inHidden = true;
             }
             else {
                 // Handle SEC/ESEF links-to-hidden
@@ -456,7 +497,7 @@ export class Viewer {
                 if (vuid !== null) {
                     let nodes = this._findOrCreateWrapperNode(n, inHidden);
                     nodes.addClass("ixbrl-element").data('ivids', [vuid]);
-                    this._docOrderItemIndex.addItem(vuid, docIndex);
+                    this.docOrderItemIndex.addItem(vuid, docIndex);
                     /* We may have already seen the corresponding ix element in the hidden
                      * section */
                     const ixn = this._ixNodeMap[vuid];
@@ -474,7 +515,6 @@ export class Viewer {
                 }
             }
         }
-        this._preProcessChildNodes(n, reportIndex, docIndex, inHidden);
     }
 
     _preProcessChildNodes(domNode, reportIndex, docIndex, inHidden) {
@@ -505,15 +545,15 @@ export class Viewer {
     _selectAdjacentTag(offset, currentItem) {
         var nextVuid;
         if (currentItem !== null) {
-            nextVuid = this._docOrderItemIndex.getAdjacentItem(currentItem.vuid, offset);
+            nextVuid = this.docOrderItemIndex.getAdjacentItem(currentItem.vuid, offset);
             this.showDocumentForItemId(nextVuid);
         }
         // If no fact selected go to the first or last in the current document
         else if (offset > 0) {
-            nextVuid = this._docOrderItemIndex.getFirstInDocument(this._currentDocumentIndex);
+            nextVuid = this.docOrderItemIndex.getFirstInDocument(this._currentDocumentIndex);
         } 
         else {
-            nextVuid = this._docOrderItemIndex.getLastInDocument(this._currentDocumentIndex);
+            nextVuid = this.docOrderItemIndex.getLastInDocument(this._currentDocumentIndex);
         }
         
         const nextElement = this.elementsForItemId(nextVuid);
@@ -535,10 +575,6 @@ export class Viewer {
         $("body", this._contents)
             .on("click", () => viewer.selectElement(null));
         
-        $('#iframe-container .zoom-in').on("click", () => this.zoomIn());
-        $('#iframe-container .zoom-out').on("click", () => this.zoomOut());
-        $('#iframe-container .print').on("click", () => this.currentDocument().get(0).contentWindow.print());
-
         TableExport.addHandles(this._contents, this._reportSet);
     }
 
@@ -714,7 +750,7 @@ export class Viewer {
     // Returns a jQuery node list containing the primary wrapper node for each
     // vuid provided
     primaryElementsForItemIds(vuids) {
-        return $(vuids.map(vuid => this.elementsForItemId(vuid).first().get(0)));
+        return $(vuids.map(vuid => this.elementsForItemId(vuid).filter(".ixbrl-element").toArray()).flat());
     }
 
     /*
@@ -750,57 +786,74 @@ export class Viewer {
     }
 
     highlightAllTags(on, namespaceGroups) {
-        const groups = {};
-        $.each(namespaceGroups, function (i, ns) {
-            groups[ns] = i % HIGHLIGHT_COLORS;
-        });
-        const reportSet = this._reportSet;
-        const viewer = this;
-        if (on) {
-            $(".ixbrl-element", this._contents)
-                .addClass("ixbrl-highlight")
-                .each(function () {
-                    // Find the first ixn for this element that isn't a footnote.
-                    // Choosing the first means that we're arbitrarily choosing a
-                    // highlight color for an element that is double tagged in a
-                    // table cell.
-                    const ixn = $(this).data('ivids').map(id => viewer._ixNodeMap[id]).filter(ixn => !ixn.footnote)[0];
-                    if (ixn !== undefined ) {
-                        const item = reportSet.getItemById(ixn.id);
-                        if (item !== undefined) {
-                            const elements = viewer.primaryElementsForItemIds(ixn.chainIXIds());
-                            const i = groups[item.conceptQName().prefix];
-                            if (i !== undefined) {
-                                elements.addClass("ixbrl-highlight-" + i);
-                            }
-                        }
-                    }
-            });
+        const reviewMode = this._iv?.isReviewModeEnabled?.() === true;
+        if (on && !this._highlightAllPrepared && !reviewMode) {
+            const groups = new Map(namespaceGroups.map((ns, i) => [ns, i % HIGHLIGHT_COLORS]));
+            this._applyHighlightToFactWrappers(groups);
+            this._highlightAllPrepared = true;
         }
-        else {
-            $(".ixbrl-element", this._contents).removeClass(
-                (i, className) => (className.match (/(^|\s)ixbrl-highlight\S*/g) || []).join(' ')
-            );
+        this._toggleHighlightAll(on);
+    }
+
+    _toggleHighlightAll(on) {
+        for (const iframe of this._iframes.get()) {
+            const body = iframe.contentDocument?.body;
+            body?.classList.toggle("ixbrl-highlight-all", !!on);
         }
     }
 
-    _zoom() {
+    _applyHighlightToFactWrappers(groups) {
+        const seenIds = new Set();
+        const coloredElements = new Set();
+        for (const [vuid, ixn] of Object.entries(this._ixNodeMap)) {
+            if (this.continuationOfMap?.[vuid] !== undefined) {
+                continue;
+            }
+            const color = this._namespaceHighlightColor(ixn, groups);
+            for (const id of ixn.chainIXIds()) {
+                if (seenIds.has(id)) {
+                    continue;
+                }
+                seenIds.add(id);
+                const chainNode = this._ixNodeMap[id];
+                if (chainNode !== undefined) {
+                    this._highlightPrimaryWrappers(chainNode, color, coloredElements);
+                }
+            }
+        }
+    }
+
+    _namespaceHighlightColor(ixn, groups) {
+        if (ixn.footnote) {
+            return undefined;
+        }
+        const item = this._reportSet.getItemById(ixn.id);
+        if (item === undefined) {
+            return undefined;
+        }
+        return groups.get(item.conceptQName().prefix);
+    }
+
+    _highlightPrimaryWrappers(ixn, color, coloredElements) {
+        const primaryElements = this.primaryElementsForItemIds([ixn.id]).get();
+        for (const element of primaryElements) {
+            const classes = ["ixbrl-highlight"];
+            if (color !== undefined && !coloredElements.has(element)) {
+                classes.push(`ixbrl-highlight-${color}`);
+                coloredElements.add(element);
+            }
+            element.classList.add(...classes);
+        }
+    }
+
+    zoom(pct) {
+        this.scale = pct/100;
         const viewTop = this._contents.scrollTop();
         const height = $("html", this._contents).height();
         $('body', this._contents).css('zoom', this.scale);
 
         const newHeight = $("html", this._contents).height();
         this._contents.scrollTop(newHeight * (viewTop)/height );
-    }
-
-    zoomIn() {
-        this.scale *= 1.1;
-        this._zoom();
-    }
-
-    zoomOut() {
-        this.scale /= 1.1;
-        this._zoom();
     }
 
     factsInSameTable(fact) {
@@ -820,11 +873,8 @@ export class Viewer {
         this.changeItemClass(f.vuid, "ixbrl-linked-highlight", true);
     }
 
-    _setTitle(docIndex) {
-        const title = $('head title', this._iframes.eq(docIndex).contents()).text();
-        $('#top-bar .document-title')
-            .text(title)
-            .attr("aria-label", "Inline Viewer: " + title);
+    getTitle(docIndex) {
+        return $('head title', this._iframes.eq(docIndex).contents()).text();
     }
 
     showDocumentForItemId(vuid) {
@@ -833,6 +883,10 @@ export class Viewer {
 
     currentDocument() {
         return this._iframes.eq(this._currentDocumentIndex);
+    }
+
+    documentCount() {
+        return this._iframes.length;
     }
 
     selectDocument(docIndex) {
@@ -849,7 +903,6 @@ export class Viewer {
             .eq(docIndex)
             .height("100%")
             .data("selected", true);
-        this._setTitle(docIndex);
     }
 
     * postProcess() {
@@ -865,19 +918,29 @@ export class Viewer {
                     yield;
                 }
             }
+            // Collect before adding classes so each write does not force the
+            // next height read to flush layout.
+            const noHighlight = [];
             for (const [i, e] of elts.entries()) {
                 if (getComputedStyle(e).getPropertyValue("display") !== 'inline' && e.getBoundingClientRect().height == 0) {
-                    e.classList.add("ixbrl-no-highlight");
+                    noHighlight.push(e);
                 }
                 if (i % 100 === 0) {
                     yield;
                 }
             }
+            for (const e of noHighlight) {
+                e.classList.add("ixbrl-no-highlight");
+            }
         }
     }
 
     postLoadAsync() {
-        runGenerator(this.postProcess());
+        runGenerator(this.postProcess(), () => this.postProcessingComplete());
+    }
+
+    postProcessingComplete() {
+        $("#ixv").addClass("post-processing-complete");
     }
 
 }
