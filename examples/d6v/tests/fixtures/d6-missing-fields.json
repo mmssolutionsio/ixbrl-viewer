@@ -1,9 +1,0 @@
-{
-  "signatures": [
-    {
-      "id": "sig-minimal",
-      "verificationStatus": "valid",
-      "coverage": { "facts": [], "divs": [], "selectors": [] }
-    }
-  ]
-}

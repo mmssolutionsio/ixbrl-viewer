@@ -1,4 +1,41 @@
 {
+  "name": "ixbrl-viewer",
+  "version": "0.0.0",
+  "description": "iXBRL Viewer",
+  "main": "iXBRLViewerPlugin/viewer/src/js/ixbrlviewer.js",
+  "directories": {
+    "test": "tests"
+  },
+  "files": [
+    "iXBRLViewerPlugin/viewer/"
+  ],
+  "scripts": {
+    "test": "jest --roots=iXBRLViewerPlugin",
+    "test:integration": "npm run test:integrationInstall && npm run test:integrationBuild && npm run test:integrationTest",
+    "test:integrationBuild": "npm run font && npm run prod && bash tests/playwright/tools/generate.sh",
+    "test:integrationInstall": "npx playwright install --with-deps chromium",
+    "test:integrationTest": "playwright test",
+    "dev": "webpack --config iXBRLViewerPlugin/viewer/webpack.dev.js",
+    "prod": "webpack --config iXBRLViewerPlugin/viewer/webpack.prod.js",
+    "stylelint": "stylelint iXBRLViewerPlugin/viewer/src/less/*.less",
+    "i18n": "i18next -c iXBRLViewerPlugin/viewer/i18next-parser.config.js",
+    "font": "node iXBRLViewerPlugin/viewer/tools/build-font.js"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git@github.com:Arelle/ixbrl-viewer.git"
+  },
+  "stylelint": {
+    "customSyntax": "postcss-less",
+    "extends": "stylelint-config-standard",
+    "rules": {
+      "at-rule-prelude-no-invalid": null,
+      "declaration-property-value-no-unknown": null,
+      "font-family-no-missing-generic-family-keyword": null,
+      "no-descending-specificity": null,
+      "property-no-vendor-prefix": null
+    }
+  },
   "author": "",
   "dependencies": {
     "chart.js": "^4.4.2",
@@ -17,7 +54,6 @@
     "postcss-less": "^6.0.0",
     "write-excel-file": "^4.0.2"
   },
-  "description": "iXBRL Viewer",
   "devDependencies": {
     "@babel/core": "^8.0.0",
     "@babel/preset-env": "^8.0.0",
@@ -27,50 +63,14 @@
     "html-loader": "^5.0.0",
     "http-server": "^14.1.1",
     "i18next-parser": "^9.0.0",
-    "jest": "^30.5.2",
+    "jest": "^30.0.2",
     "jest-environment-jsdom": "^30.0.2",
     "stylelint": "^17.0.0",
     "stylelint-config-standard": "^40.0.0",
-    "webfont": "^12.7.0",
+    "webfont": "^12.5.0",
     "webpack": "^5.91.0",
     "webpack-cli": "^7.0.0",
     "webpack-merge": "^6.0.1"
   },
-  "directories": {
-    "test": "tests"
-  },
-  "files": [
-    "iXBRLViewerPlugin/viewer/"
-  ],
-  "license": "Apache-2.0",
-  "main": "iXBRLViewerPlugin/viewer/src/js/ixbrlviewer.js",
-  "name": "ixbrl-viewer",
-  "repository": {
-    "type": "git",
-    "url": "git@github.com:Arelle/ixbrl-viewer.git"
-  },
-  "scripts": {
-    "dev": "webpack --config iXBRLViewerPlugin/viewer/webpack.dev.js",
-    "font": "node iXBRLViewerPlugin/viewer/tools/build-font.js",
-    "i18n": "i18next -c iXBRLViewerPlugin/viewer/i18next-parser.config.js",
-    "prod": "webpack --config iXBRLViewerPlugin/viewer/webpack.prod.js",
-    "stylelint": "stylelint iXBRLViewerPlugin/viewer/src/less/*.less",
-    "test": "jest --roots=iXBRLViewerPlugin",
-    "test:integration": "npm run test:integrationInstall && npm run test:integrationBuild && npm run test:integrationTest",
-    "test:integrationBuild": "npm run font && npm run prod && bash tests/playwright/tools/generate.sh",
-    "test:integrationInstall": "npx playwright install --with-deps chromium",
-    "test:integrationTest": "playwright test"
-  },
-  "stylelint": {
-    "customSyntax": "postcss-less",
-    "extends": "stylelint-config-standard",
-    "rules": {
-      "at-rule-prelude-no-invalid": null,
-      "declaration-property-value-no-unknown": null,
-      "font-family-no-missing-generic-family-keyword": null,
-      "no-descending-specificity": null,
-      "property-no-vendor-prefix": null
-    }
-  },
-  "version": "0.0.0"
+  "license": "Apache-2.0"
 }
