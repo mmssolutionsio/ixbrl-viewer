@@ -18,7 +18,7 @@ const testReportData = {
 
 function getReportSearch(report) {
     const reportSearch = new ReportSearch(report);
-    const searchIndex = reportSearch.buildSearchIndex(() => {});
+    const searchIndex = reportSearch.buildSearchIndex();
     for (const _ of searchIndex) {}
     return reportSearch;
 }
@@ -99,17 +99,18 @@ function testReportSet(reports) {
 function testSearchSpec(searchString='') {
     const spec = {};
     spec.searchString = searchString;
-    spec.visibilityFilter = '*';
+    spec.visibilityFilter = [];
     spec.namespacesFilter = [];
     spec.unitsFilter = [];
     spec.scalesFilter = [];
     spec.periodFilter = [];
-    spec.conceptTypeFilter = '*';
+    spec.conceptTypeFilter = [];
     spec.dataTypesFilter = [];
     spec.dimensionTypeFilter = [];
-    spec.factValueFilter = '*';
+    spec.factValueFilter = [];
     spec.calculationsFilter = [];
     spec.targetDocumentFilter = [];
+    spec.mandatoryFactsFilter = [];
     return spec;
 }
 
@@ -134,7 +135,7 @@ describe("Search fact value filter", () => {
 
     test("Fact Value Negative filter works", () => {
         const spec = testSearchSpec('Cash');
-        spec.factValueFilter = 'negative'
+        spec.factValueFilter = ['negative'];
         const results = reportSearch.search(spec);
         expect(results.length).toEqual(1)
         expect(results[0]["fact"].localId()).toEqual("negative")
@@ -142,8 +143,8 @@ describe("Search fact value filter", () => {
 
     test("Fact Value Negative filter works with other filter", () => {
         const spec = testSearchSpec('Cash');
-        spec.factValueFilter = 'negative'
-        spec.periodFilter = ['2018-01-01/2019-01-01']
+        spec.factValueFilter = ['negative'];
+        spec.periodFilter = ['2018-01-01/2019-01-01'];
         const results = reportSearch.search(spec);
         expect(results.length).toEqual(1)
         expect(results[0]["fact"].localId()).toEqual("negative")
@@ -151,7 +152,7 @@ describe("Search fact value filter", () => {
 
     test("Fact Value Positive filter works", () => {
         const spec = testSearchSpec('Cash');
-        spec.factValueFilter = 'positive'
+        spec.factValueFilter = ['positive'];
         const results = reportSearch.search(spec);
         expect(results.length).toEqual(1)
         expect(results[0]["fact"].localId()).toEqual("positive")
@@ -159,7 +160,7 @@ describe("Search fact value filter", () => {
 
     test("Fact Value Positive filter works with other filter", () => {
         const spec = testSearchSpec('Cash');
-        spec.factValueFilter = 'positive'
+        spec.factValueFilter = ['positive'];
         spec.periodFilter = ['2018-01-01/2019-01-01']
         const results = reportSearch.search(spec);
         expect(results.length).toEqual(1)
@@ -223,23 +224,31 @@ describe("Search calculation filter", () => {
         const results = reportSearch.search(spec).map(r => r.fact.localId()).sort();
         expect(results).toEqual(['item1', 'item2', 'summation']);
     });
-    const emptyReport = testReport(
-            {
-                "concepts": {
-                    ...createSimpleConcept("test:Concept", "Concept"),
-                },
-                "facts": {
-                    ...createSimpleFact("fact", "test:Fact"),
-                },
-            },
-    )
-    const emptyReportSearch = getReportSearch(emptyReport);
-
     test("Calculations filter works on empty report", () => {
+        const emptyReport = testReport(
+                {
+                    "concepts": {
+                        ...createSimpleConcept("test:Concept", "Concept"),
+                    },
+                    "facts": {
+                        ...createSimpleFact("fact", "test:Fact"),
+                    },
+                },
+        );
+        jest.spyOn(console, 'log').withImplementation(() => {}, () => {
+            const emptyReportSearch = getReportSearch(emptyReport);
+            const spec = testSearchSpec();
+            spec.calculationsFilter = ['summation', 'contributor'];
+            const results = emptyReportSearch.search(spec).map(r => r.fact.localId()).sort();
+            expect(results).toEqual([]);
+        });
+    });
+
+    test("Calculations 'none' filter works", () => {
         const spec = testSearchSpec();
-        spec.calculationsFilter = ['summation', 'contributor'];
-        const results = emptyReportSearch.search(spec).map(r => r.fact.localId()).sort();
-        expect(results).toEqual([]);
+        spec.calculationsFilter = ['none'];
+        const results = reportSearch.search(spec).map(r => r.fact.localId()).sort();
+        expect(results).toEqual(['other']);
     });
 });
 
@@ -369,7 +378,7 @@ describe("Search units filter", () => {
         spec1.unitsFilter = Array.from(report.getUsedUnits());
         const results1 = reportSearch.search(spec1).map(r => r.fact.localId()).sort();
         const spec2 = testSearchSpec()
-        spec2.conceptTypeFilter = 'numeric';
+        spec2.conceptTypeFilter = ['numeric'];
         const results2 = reportSearch.search(spec2).map(r => r.fact.localId()).sort();
         expect(results1).toEqual(results2);
         expect(results1).toEqual(['itemA', 'itemAB', 'itemB', 'itemBA'])
@@ -430,23 +439,31 @@ describe("Search dimension type filter", () => {
         expect(results).toEqual(['explicit', 'explicit2', 'explicitAndTyped', 'explicitAndTyped2', 'typed', 'typed2']);
     });
 
-    const emptyReport = testReport(
-            {
-                "concepts": {
-                    ...createSimpleConcept("test:Concept", "Concept"),
-                },
-                "facts": {
-                    ...createSimpleFact("fact", "test:Fact"),
-                },
-            },
-    )
-    const emptyReportSearch = getReportSearch(emptyReport);
-
     test("Dimension filter works on empty report", () => {
+        const emptyReport = testReport(
+                {
+                    "concepts": {
+                        ...createSimpleConcept("test:Concept", "Concept"),
+                    },
+                    "facts": {
+                        ...createSimpleFact("fact", "test:Fact"),
+                    },
+                },
+        );
+        jest.spyOn(console, 'log').withImplementation(() => {}, () => {
+            const emptyReportSearch = getReportSearch(emptyReport);
+            const spec = testSearchSpec();
+            spec.dimensionTypeFilter = ['explicit'];
+            const results = emptyReportSearch.search(spec).map(r => r.fact.localId()).sort();
+            expect(results).toEqual([]);
+        });
+    });
+
+    test("Dimension 'none' filter works", () => {
         const spec = testSearchSpec();
-        spec.dimensionTypeFilter = ['explicit'];
-        const results = emptyReportSearch.search(spec).map(r => r.fact.localId()).sort();
-        expect(results).toEqual([]);
+        spec.dimensionTypeFilter = ['none'];
+        const results = reportSearch.search(spec).map(r => r.fact.localId()).sort();
+        expect(results).toEqual(['simple', 'simple2']);
     });
 });
 
@@ -616,4 +633,157 @@ describe("Search target document filter", () => {
         expect(results).toEqual(['item0', 'item1', 'item2', 'item3', 'item4', 'item5' ]);
     });
 
+});
+
+describe("Search visibility filter", () => {
+    const report = testReport(
+            {
+                "concepts": {
+                    ...createSimpleConcept("a:Item1"),
+                    ...createSimpleConcept("a:Item2"),
+                },
+                "facts": {
+                    ...createSimpleFact("visible1", "a:Item1"),
+                    ...createSimpleFact("hidden1", "a:Item2"),
+                }
+            },
+            {
+                "visible1": { "isHidden": false },
+                "hidden1": { "isHidden": true },
+            }
+    )
+    const reportSearch = getReportSearch(report);
+
+    test("Visibility filter works without selection", () => {
+        const spec = testSearchSpec();
+        spec.visibilityFilter = [];
+        const results = reportSearch.search(spec).map(r => r.fact.localId()).sort();
+        expect(results).toEqual(['hidden1', 'visible1']);
+    });
+
+    test("Visibility filter works with 'visible' selection", () => {
+        const spec = testSearchSpec();
+        spec.visibilityFilter = ['visible'];
+        const results = reportSearch.search(spec).map(r => r.fact.localId()).sort();
+        expect(results).toEqual(['visible1']);
+    });
+
+    test("Visibility filter works with 'hidden' selection", () => {
+        const spec = testSearchSpec();
+        spec.visibilityFilter = ['hidden'];
+        const results = reportSearch.search(spec).map(r => r.fact.localId()).sort();
+        expect(results).toEqual(['hidden1']);
+    });
+
+    test("Visibility filter works with both selections", () => {
+        const spec = testSearchSpec();
+        spec.visibilityFilter = ['visible', 'hidden'];
+        const results = reportSearch.search(spec).map(r => r.fact.localId()).sort();
+        expect(results).toEqual(['hidden1', 'visible1']);
+    });
+});
+
+describe("Empty search", () => {
+    const report = testReport(
+            {
+                "concepts": {
+                    ...createSimpleConcept("a:Item1"),
+                    ...createSimpleConcept("a:Item2"),
+                    ...createSimpleConcept("a:Item3"),
+                    ...createSimpleConcept("a:Item4"),
+                },
+                "facts": {
+                    ...createSimpleFact("visible1", "a:Item1"),
+                    ...createSimpleFact("hidden1", "a:Item2"),
+                    ...createSimpleFact("visible2", "a:Item3"),
+                    ...createSimpleFact("hidden2", "a:Item4"),
+                }
+            },
+            {
+                "visible1": { "isHidden": false },
+                "hidden1": { "isHidden": true },
+                "visible2": { "isHidden": false },
+                "hidden2": { "isHidden": true },
+            }
+    )
+    const reportSearch = getReportSearch(report);
+
+    test("Empty search returns every fact, visible facts first", () => {
+        const results = reportSearch.search(testSearchSpec())
+            .map(r => r.fact.localId());
+        expect(results).toEqual(['visible1', 'visible2', 'hidden1', 'hidden2']);
+    });
+});
+
+describe("Unparseable search", () => {
+    const report = testReport(
+            {
+                "concepts": {
+                    ...createSimpleConcept("a:Cash", "Cash"),
+                },
+                "facts": {
+                    ...createSimpleFact("cash1", "a:Cash"),
+                }
+            }
+    )
+    const reportSearch = getReportSearch(report);
+
+    test.each(['+', 'Cash^', 'Cash~', 'unknownField:Cash'])(
+            "Search for %p returns no matches", (searchString) => {
+        expect(reportSearch.search(testSearchSpec(searchString))).toEqual([]);
+    });
+
+    test("A parseable search still works after an unparseable one", () => {
+        reportSearch.search(testSearchSpec('+'));
+        const results = reportSearch.search(testSearchSpec('Cash'))
+            .map(r => r.fact.localId());
+        expect(results).toEqual(['cash1']);
+    });
+});
+
+describe("Search mandatory facts filter", () => {
+    const facts = {
+        ...createSimpleFact("mandatory1", "a:Item1"),
+        ...createSimpleFact("other1", "a:Item2"),
+    };
+    facts["mandatory1"]["a"]["m"] = true;
+
+    const report = testReport(
+            {
+                "concepts": {
+                    ...createSimpleConcept("a:Item1"),
+                    ...createSimpleConcept("a:Item2"),
+                },
+                "facts": facts
+            }
+    )
+    const reportSearch = getReportSearch(report);
+
+    test("Mandatory facts filter works without selection", () => {
+        const spec = testSearchSpec();
+        spec.mandatoryFactsFilter = [];
+        const results = reportSearch.search(spec).map(r => r.fact.localId()).sort();
+        expect(results).toEqual(['mandatory1', 'other1']);
+    });
+
+    test("Mandatory facts filter works with 'mandatory' selection", () => {
+        const spec = testSearchSpec();
+        spec.mandatoryFactsFilter = ['mandatory'];
+        const results = reportSearch.search(spec).map(r => r.fact.localId()).sort();
+        expect(results).toEqual(['mandatory1']);
+    });
+
+    test("Mandatory facts filter works with 'other' selection", () => {
+        const spec = testSearchSpec();
+        spec.mandatoryFactsFilter = ['other'];
+        const results = reportSearch.search(spec).map(r => r.fact.localId()).sort();
+        expect(results).toEqual(['other1']);
+    });
+
+    test("Mandatory facts filter works with both selections", () => {
+        const spec = testSearchSpec();
+        spec.mandatoryFactsFilter = ['mandatory', 'other'];
+        const results = reportSearch.search(spec).map(r => r.fact.localId()).sort();
+        expect(results).toEqual(['mandatory1', 'other1']);
+    });
 });

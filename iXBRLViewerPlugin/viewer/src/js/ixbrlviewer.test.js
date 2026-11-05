@@ -3,6 +3,8 @@
 import {iXBRLViewer} from "./ixbrlviewer";
 import {
     FEATURE_GUIDE_LINK,
+    FEATURE_HOME_LINK_LABEL,
+    FEATURE_HOME_LINK_URL,
     FEATURE_REVIEW,
     FEATURE_SUPPORT_LINK,
     FEATURE_SURVEY_LINK,
@@ -110,6 +112,42 @@ describe("Feature enablement", () => {
     });
 });
 
+describe("Feature merging", () => {
+    var viewer = null;
+    beforeAll(() => {
+        viewer = new iXBRLViewer({})
+    });
+
+    test("Config features and generation features are both retained", () => {
+        expect(viewer._mergeFeatures({'a': true}, {'b': true}))
+            .toEqual({'a': true, 'b': true});
+    });
+
+    test("Generation time value wins on collision", () => {
+        expect(viewer._mergeFeatures({'a': '1'}, {'a': '2'}))
+            .toEqual({'a': '1'});
+    });
+
+    test("Legacy array form of generation features is normalised", () => {
+        expect(viewer._mergeFeatures(['a', 'b'], undefined))
+            .toEqual({'a': true, 'b': true});
+    });
+
+    test("Legacy array form merges with config features", () => {
+        expect(viewer._mergeFeatures(['a'], {'b': true}))
+            .toEqual({'a': true, 'b': true});
+    });
+
+    test("No config features leaves generation features untouched", () => {
+        expect(viewer._mergeFeatures({'a': true}, undefined))
+            .toEqual({'a': true});
+    });
+
+    test("No features at either level gives an empty set", () => {
+        expect(viewer._mergeFeatures(undefined, undefined)).toEqual({});
+    });
+});
+
 describe("Review mode enablement", () => {
     var viewer = null;
     beforeAll(() => {
@@ -171,6 +209,29 @@ describe("Survey link enablement", () => {
     });
 });
 
+describe("Home link feature values", () => {
+    var viewer = null;
+    beforeAll(() => {
+        viewer = new iXBRLViewer({})
+    });
+
+    test("getStaticFeatureValue returns configured home link url and label", () => {
+        viewer.setFeatures({[FEATURE_HOME_LINK_URL]: '/home', [FEATURE_HOME_LINK_LABEL]: 'Home'}, '')
+        expect(viewer.getStaticFeatureValue(FEATURE_HOME_LINK_URL)).toEqual('/home');
+        expect(viewer.getStaticFeatureValue(FEATURE_HOME_LINK_LABEL)).toEqual('Home');
+    });
+
+    test("Query string cannot override static-only home link url", () => {
+        viewer.setFeatures({[FEATURE_HOME_LINK_URL]: '/home'}, FEATURE_HOME_LINK_URL + '=/other')
+        expect(viewer.getStaticFeatureValue(FEATURE_HOME_LINK_URL)).toEqual('/home');
+    });
+
+    test("Query string cannot override static-only home link label", () => {
+        viewer.setFeatures({[FEATURE_HOME_LINK_LABEL]: 'Home'}, FEATURE_HOME_LINK_LABEL + '=Other')
+        expect(viewer.getStaticFeatureValue(FEATURE_HOME_LINK_LABEL)).toEqual('Home');
+    });
+});
+
 describe("Guide link enablement", () => {
     var viewer = null;
     beforeAll(() => {
@@ -190,5 +251,39 @@ describe("Guide link enablement", () => {
     test("Guide link disabled by query", () => {
         viewer.setFeatures({[FEATURE_GUIDE_LINK]: '/guide'}, FEATURE_GUIDE_LINK + '=false')
         expect(viewer.getGuideLinkUrl()).toEqual('/guide');
+    });
+});
+
+describe("Document reparenting", () => {
+    let viewer;
+    beforeEach(() => {
+        document.head.innerHTML = '<title>Report</title><meta name="viewport" content="width=1200">';
+        document.body.innerHTML = '<div id="ixv"><div id="iframe-container"></div></div><p id="report-content">Report</p>';
+        viewer = new iXBRLViewer({});
+        viewer.runtimeConfig = {};
+    });
+
+    afterEach(() => {
+        document.head.innerHTML = '';
+        document.body.innerHTML = '';
+    });
+
+    test("Shell gets its own viewport meta and the report keeps its own", () => {
+        const iframe = viewer._reparentDocument();
+        viewer._addViewportMeta();
+        const iframeDoc = iframe.contentDocument;
+
+        expect(iframeDoc.querySelector('meta[name="viewport"]').getAttribute("content")).toEqual("width=1200");
+        expect(iframeDoc.getElementById("report-content")).not.toBeNull();
+
+        const shellMetas = document.head.querySelectorAll('meta[name="viewport"]');
+        expect(shellMetas.length).toEqual(1);
+        expect(shellMetas[0].getAttribute("content")).toEqual("width=device-width, initial-scale=1");
+    });
+
+    test("Viewport meta is not duplicated", () => {
+        viewer._addViewportMeta();
+        viewer._addViewportMeta();
+        expect(document.head.querySelectorAll('meta[name="viewport"]').length).toEqual(1);
     });
 });

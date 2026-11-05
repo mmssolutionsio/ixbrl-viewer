@@ -49,6 +49,11 @@ export class iXBRLViewer {
      * Called when the display options menu is created or recreated.  menu is a
      * Menu object, and can be modified to add additional menu items.
      *
+     * extendToolbarHighlightMenu(menu)
+     *
+     * Called when the toolbar highlight menu is created or recreated.  menu is
+     * a Menu object, and can be modified to add additional menu items.
+     *
      * extendHighlightKey(key)
      *
      * Called when the highlight color key is created.  key is an array of labels,
@@ -162,10 +167,15 @@ export class iXBRLViewer {
 
     _loadInspectorHTML() {
         /* Insert HTML and CSS styles into body */
-        const footerLogoHtml = this.runtimeConfig.skin?.footerLogoHtml ?? require("../html/footer-logo.html");
+        /* The logo is inlined into the link rather than referenced as an <img>,
+         * so that the stylesheet can reach inside it and lighten the ink for
+         * dark mode. */
+        const defaultFooterLogo = $(require('../html/footer-logo.html'))
+            .append(require("../img/arelle.svg?raw"));
+        const footerLogo = this.runtimeConfig.skin?.footerLogoHtml ?? defaultFooterLogo;
         $(require('../html/inspector.html'))
             .prependTo('body')
-            .find("#footer-logo").html(footerLogoHtml);
+            .find("#footer-logo").append(footerLogo);
         const inspector_css = require('../less/inspector.less').toString(); 
         $('<style id="ixv-style"></style>')
             .prop("type", "text/css")
@@ -176,10 +186,19 @@ export class iXBRLViewer {
                 .attr("href", this.resolveRelativeUrl(this.runtimeConfig.skin.stylesheetUrl))
                 .appendTo('head');
         }
-        const favIconUrl = this.runtimeConfig.skin?.faviconUrl !== undefined ? this.resolveRelativeUrl(this.runtimeConfig.skin.faviconUrl) : require("../img/favicon.ico");
-        $('<link id="ixv-favicon" type="image/x-icon" rel="shortcut icon" />')
-            .attr('href', favIconUrl)
-            .appendTo('head');
+        if (this.runtimeConfig.skin?.faviconUrl !== undefined) {
+            $('<link id="ixv-favicon" rel="icon" />')
+                .attr('href', this.resolveRelativeUrl(this.runtimeConfig.skin.faviconUrl))
+                .appendTo('head');
+        }
+        else {
+            $('<link id="ixv-favicon" type="image/x-icon" rel="icon" />')
+                .attr('href', require("../img/favicon.ico"))
+                .appendTo('head');
+            $('<link id="ixv-favicon-svg" type="image/svg+xml" rel="icon" />')
+                .attr('href', require("../img/favicon.svg"))
+                .appendTo('head');
+        }
 
         try {
             $('.inspector-foot .version').text(__VERSION__);
@@ -201,17 +220,13 @@ export class iXBRLViewer {
         doc.write("<!DOCTYPE html><html><head><title></title></head><body></body></html>");
         doc.close();
 
-        let docTitle = $('title').text();
-        if (docTitle !== "") {
-            docTitle = `Inline Viewer - ${docTitle}`;
-        }
-        else {
-            docTitle = "Inline Viewer";
-        }
+        const titlePrefix = this.runtimeConfig.skin?.titlePrefix ?? "Inline Viewer";
+        const reportTitle = $('title').text();
+        const docTitle = reportTitle !== "" ? `${titlePrefix} - ${reportTitle}` : titlePrefix;
 
 
         $('head')
-            .children().not("script, style#ixv-style, link#ixv-style-skin, link#ixv-favicon").appendTo($(iframe).contents().find('head'));
+            .children().not("script, style#ixv-style, link#ixv-style-skin, link#ixv-favicon, link#ixv-favicon-svg").appendTo($(iframe).contents().find('head'));
 
         $('<title>').text(docTitle).appendTo($('head'));
 
@@ -232,6 +247,12 @@ export class iXBRLViewer {
         /* Avoid any inline styles on the old body interfering with the inspector */
         body.removeAttr('style');
         return iframe;
+    }
+
+    _addViewportMeta() {
+        if ($('head meta[name="viewport"]').length === 0) {
+            $('<meta name="viewport" content="width=device-width, initial-scale=1">').appendTo('head');
+        }
     }
 
     _getTaxonomyData() {
@@ -278,6 +299,22 @@ export class iXBRLViewer {
         });
     }
 
+    _mergeFeatures(generationFeatures, runtimeConfigFeatures) {
+        let features = generationFeatures;
+        if (!features) {
+            features = {};
+        }
+        // `features` was previously an array of flag values
+        // Support this for backwards compatability
+        else if (Array.isArray(features)) {
+            features = features.reduce((obj, val) => {
+                obj[val] = true;
+                return obj;
+            }, {});
+        }
+        return {...runtimeConfigFeatures, ...features};
+    }
+
     load() {
         const iv = this;
         const inspector = this.inspector;
@@ -301,21 +338,7 @@ export class iXBRLViewer {
             // We need to parse JSON first so that we can determine feature enablement before loading begins.
             const taxonomyData = iv._getTaxonomyData();
             const parsedTaxonomyData = taxonomyData && JSON.parse(taxonomyData);
-            let features = parsedTaxonomyData?.features;
-            if (!features) {
-                features = {};
-            }
-            // `features` was previously an array of flag values
-            // Support this for backwards compatability
-            else if (Array.isArray(features)) {
-                features = features.reduce((obj, val) => {
-                    obj[val] = true;
-                    return obj;
-                }, {});
-            }
-            if (this.runtimeConfig.features !== undefined) {
-                features = {...this.runtimeConfig.features, features};
-            }
+            const features = iv._mergeFeatures(parsedTaxonomyData?.features, this.runtimeConfig.features);
             iv.setFeatures(features, window.location.search);
 
             const reportSet = new ReportSet(parsedTaxonomyData);
@@ -336,6 +359,7 @@ export class iXBRLViewer {
             if (!stubViewer) {
                 iframes = $(iv._reparentDocument());
             } 
+            iv._addViewportMeta();
             const ds = reportSet.reportFiles();
             let hasExternalIframe = false;
             for (let i = stubViewer ? 0 : 1; i < ds.length; i++) {
@@ -380,7 +404,7 @@ export class iXBRLViewer {
                         viewer.initialize()
                             .then(() => inspector.initialize(reportSet, viewer))
                             .then(() => {
-                                interact('#viewer-pane').resizable({
+                                interact('#pane-left').resizable({
                                     edges: { left: false, right: ".resize", bottom: false, top: false},
                                     restrictEdges: {
                                         outer: 'parent',
@@ -390,14 +414,15 @@ export class iXBRLViewer {
                                         min: { width: 100 }
                                     },
                                 })
-                                .on('resizestart', () => 
-                                    $('#ixv').css("pointer-events", "none")
+                                .on('resizestart', () => {
+                                    $('#ixv').css("pointer-events", "none");
+                                    $('#pane-left').css("flex-grow", 0);
+                                }
                                 )
                                 .on('resizemove', (event) => {
                                     const target = event.target;
                                     const w = 100 * event.rect.width / $(target).parent().width();
                                     target.style.width = `${w}%`;
-                                    $('#inspector').css('width', `${100 - w}%`);
                                 })
                                 .on('resizeend', (event) =>
                                     $('#ixv').css("pointer-events", "auto")

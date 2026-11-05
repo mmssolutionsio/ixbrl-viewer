@@ -33,7 +33,8 @@
   - [Disable viewer loading](#disable-viewer-loading)
   - [Running tests](#running-tests)
     - [Running unit tests](#running-unit-tests)
-    - [Running Puppeteer tests](#running-puppeteer-tests)
+    - [Linting with Ruff](#linting-with-ruff)
+    - [Running Playwright tests](#running-playwright-tests)
   - [👥 Contributors](#-contributors)
   - [License](#license)
 
@@ -81,7 +82,7 @@ Need help with the Arelle iXBRL Viewer? Go check out [our documentation][read-th
 
 ## Installation
 
-The Python portion of this repo is developed using Python 3.13.
+The Python portion of this repo is developed using Python 3.15.
 
 1. Clone the [iXBRL Viewer git repository][ixbrlviewer-github].
 2. Download and install [Arelle][arelle-download]
@@ -317,6 +318,9 @@ parameters, as defined above.
   - `stylesheetUrl` - a URL to additional CSS definitions.
   - `faviconUrl` - a URL to an icon file to be used as the favicon for the viewer.
   - `footerLogoHtml` - a fragment of HTML that will be included in place of the standard footer logo.
+  - `titlePrefix` - a string used in place of `Inline Viewer` in the page title,
+      giving `<titlePrefix> - <report title>`, or just `<titlePrefix>` if the
+      report has no title.
 
 - `taxonomyNames` - a JSON object where:
 
@@ -343,40 +347,69 @@ In order to run the javascript unit tests make sure that you have installed all 
 
 Run the following command to run javascript unit tests: `npm run test`
 
-In order to run the python unit tests make sure that you have pip installed requirements-dev.txt.
+In order to run the python unit tests, install the development dependencies with `pip install ".[arelle]" --group dev`
 
 Run the following command to run python unit tests: `pytest tests/unit_tests`
 
-### Running Puppeteer tests
+### Linting with Ruff
 
-All commands should be run from repository root
+ixbrl-viewer uses [Ruff][ruff] to lint the codebase. Make sure you've installed the
+development dependencies (`pip install --group dev`), then run the
+following from the root of the repository to check your changes:
 
-1. Install the npm requirements(instructions under [Building the javascript locally](#building-the-javascript-locally)).
-2. Install Arelle
+```
+ruff check
+```
+
+Many issues that Ruff detects can be fixed automatically. To have Ruff apply
+those fixes for you, run:
+
+```
+ruff check --fix
+```
+
+Review any automatic fixes before committing, since not every change is safe
+to apply blindly.
+
+[ruff]: https://docs.astral.sh/ruff/
+
+### Running Playwright tests
+
+Run these commands from the repository root. Viewer generation requires Python,
+Arelle, and Bash in addition to the Node.js build tools.
+
+1. Install the npm dependencies and Arelle:
 
     ```shell
+    npm ci
     pip install .[arelle]
     ```
 
-3. [Terminal 1] Start the puppeteer serve
+2. Install Chromium, build the viewer, generate the test filings, and run the tests:
 
     ```shell
-    npm run puppeteerServe 
+    npm run test:integration
     ```
 
-    - This command generates the `ixbrlviewer.js`, uses Arelle to generate several test files, then serves the files via a nodejs http-server.
-    - Currently changes to application code require restarting this step to take effect.
-4. Start the puppeteer tests
-    - [Terminal 2]:
+    Playwright starts the HTTP server on port 8080 and stops it after the tests.
+    Outside CI, it can reuse an existing server serving the generated filings.
+    Tests run headlessly by default. To watch the browser, use
+    `npm run test:integrationTest -- --headed`. To debug interactively, use
+    `npm run test:integrationTest -- --ui`.
 
-       ```shell
-       npm run test:puppeteer
-       ```
+    Each run installs the Chromium version required by the locally installed
+    Playwright, rebuilds the viewer, and regenerates the filings. `npm run
+    test:integrationBuild` prepares these on their own, and `npm run
+    test:integrationTest` reruns the tests without rebuilding. To install only
+    Chromium and its system dependencies, use `npm run test:integrationInstall`.
 
-    - IDE:
-      - Many of the IDE's on the market can run tests via the UI.  The following is an example configuration for intellij.  Once set you can right-click on the test name or file and select the run option.
-      ![ixbrl-viewer](https://raw.githubusercontent.com/Arelle/ixbrl-viewer/master/tests/puppeteer/puppeteer_test_run_via_intellij.jpg)
-      - Debug runs with breakpoints are also typically supported.
+Reports and test results are written to `tests/playwright/artifacts/`, alongside
+but separate from the generated filings. Failed tests retain screenshots, videos,
+and traces. Browser logs are attached to each test in the report. Open it with:
+
+```shell
+npx playwright show-report tests/playwright/artifacts/report
+```
 
 ## 👥 Contributors
 

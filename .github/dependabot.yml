@@ -1,15 +1,22 @@
 version: 2
 updates:
-  - package-ecosystem: "github-actions"
-    directory: "/"
+  - package-ecosystem: github-actions
+    directories:
+      - "**/*"
     schedule:
       interval: weekly
     groups:
       github-action-dependencies:
         patterns:
           - "*"
+        update-types:
+          - minor
+          - patch
   - package-ecosystem: npm
-    directory: "/"
+    cooldown:
+      default-days: 3
+    directories:
+      - "**/*"
     schedule:
       interval: weekly
     allow:
@@ -21,25 +28,29 @@ updates:
         exclude-patterns:
           - "*jest*"
           - "stylelint*"
+        update-types:
+          - minor
+          - patch
       jest:
         patterns:
           - "*jest*"
       stylelint:
         patterns:
           - "stylelint*"
-    ignore:
-      - dependency-name: "puppeteer-screen-recorder"
-        versions:
-          - "3.0.5"
-          - "3.0.6"
   - package-ecosystem: pip
-    directory: "/"
+    cooldown:
+      default-days: 3
+    directories:
+      - "**/*"
     insecure-external-code-execution: allow
     schedule:
       interval: weekly
     allow:
       - dependency-type: all
     groups:
-      pip-dependencies:
+      python-dependencies:
         patterns:
           - "*"
+        update-types:
+          - minor
+          - patch

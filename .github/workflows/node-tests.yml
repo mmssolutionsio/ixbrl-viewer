@@ -7,6 +7,10 @@ on:
   workflow_call:
   workflow_dispatch:
 
+concurrency:
+  group: node-tests-${{ github.event.pull_request.number || github.run_id }}
+  cancel-in-progress: true
+
 permissions: {}
 
 jobs:
@@ -15,17 +19,17 @@ jobs:
       fail-fast: false
       matrix:
         os:
-          - macos-15
+          - macos-26
           - ubuntu-24.04
           - windows-2025
         node-version:
-          - '20'
           - '22'
           - '24'
+          - '26'
     runs-on: ${{ matrix.os }}
     steps:
-      - uses: actions/checkout@v5.0.0
-      - uses: actions/setup-node@v6.0.0
+      - uses: actions/checkout@v7.0.1
+      - uses: actions/setup-node@v7.1.0
         with:
           cache: 'npm'
           check-latest: true

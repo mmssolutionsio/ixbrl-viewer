@@ -1,0 +1,532 @@
+import $ from "jquery";
+import { IXNode } from "./ixnode.js";
+import { ReportSet } from "./reportset.js";
+import { Viewer } from "./viewer.js";
+import { NAMESPACE_ISO4217, viewerUniqueId } from "./util.js";
+
+function highlightReportData(facts) {
+    return {
+        prefixes: {
+            eg: "http://www.example.com",
+            iso4217: NAMESPACE_ISO4217,
+        },
+        concepts: {
+            "eg:Concept1": { labels: { std: { en: "A" } } },
+            "other:Concept2": { labels: { std: { en: "B" } } },
+        },
+        facts,
+        languages: {},
+        roles: {},
+        roleDefs: {},
+        rels: {},
+    };
+}
+
+function highlightFact(concept) {
+    return {
+        v: 1,
+        a: {
+            c: concept,
+            u: "iso4217:USD",
+            p: "2017-01-01/2018-01-01",
+        },
+    };
+}
+
+function appendHighlightWrapper(doc, className = "ixbrl-element") {
+    const wrapper = doc.createElement("span");
+    wrapper.className = className;
+    doc.body.appendChild(wrapper);
+    return wrapper;
+}
+
+function makeHighlightViewer(reviewMode = false, facts, buildNodes) {
+    const iframe = document.createElement("iframe");
+    document.body.appendChild(iframe);
+    const doc = iframe.contentDocument;
+    const factId = viewerUniqueId(0, "f1");
+    const wrapper = buildNodes === undefined ? appendHighlightWrapper(doc) : undefined;
+    if (wrapper !== undefined) {
+        $(wrapper).data("ivids", [factId]);
+    }
+    const ixNodeMap = buildNodes === undefined
+        ? { [factId]: new IXNode(factId, $(wrapper), 0) }
+        : buildNodes(doc);
+    const reportSet = new ReportSet(highlightReportData(facts ?? {
+        f1: highlightFact("eg:Concept1"),
+    }));
+    reportSet.setIXNodeMap(ixNodeMap);
+    const viewer = new Viewer(
+        { options: {}, isReviewModeEnabled: () => reviewMode },
+        $(iframe),
+        reportSet
+    );
+    viewer._ixNodeMap = ixNodeMap;
+    viewer.continuationOfMap = {};
+    return { viewer, wrapper, doc };
+}
+
+describe("highlightAllTags", () => {
+    afterEach(() => {
+        document.body.innerHTML = "";
+    });
+
+    test("non-review mode toggles report-body highlighting", () => {
+        const { viewer, wrapper, doc } = makeHighlightViewer(false);
+        const groups = viewer._reportSet.namespaceGroups();
+
+        viewer.highlightAllTags(true, groups);
+
+        expect(doc.body.classList.contains("ixbrl-highlight-all")).toBe(true);
+        expect(wrapper.classList.contains("ixbrl-highlight")).toBe(true);
+        expect(wrapper.classList.contains("ixbrl-highlight-0")).toBe(true);
+
+        viewer.highlightAllTags(false, groups);
+
+        expect(doc.body.classList.contains("ixbrl-highlight-all")).toBe(false);
+        expect(wrapper.classList.contains("ixbrl-highlight")).toBe(true);
+        expect(wrapper.classList.contains("ixbrl-highlight-0")).toBe(true);
+    });
+
+    test("review mode toggles report body highlighting without node classes", () => {
+        const { viewer, wrapper, doc } = makeHighlightViewer(true);
+        const applyHighlightToFactWrappers = jest.spyOn(viewer, "_applyHighlightToFactWrappers");
+        const groups = viewer._reportSet.namespaceGroups();
+
+        viewer.highlightAllTags(true, groups);
+
+        expect(doc.body.classList.contains("ixbrl-highlight-all")).toBe(true);
+        expect(wrapper.classList.contains("ixbrl-highlight")).toBe(false);
+        expect(wrapper.classList.contains("ixbrl-highlight-0")).toBe(false);
+        expect(applyHighlightToFactWrappers).not.toHaveBeenCalled();
+
+        viewer.highlightAllTags(false, groups);
+
+        expect(doc.body.classList.contains("ixbrl-highlight-all")).toBe(false);
+    });
+
+    test("non-review mode prepares node classes only once", () => {
+        const { viewer } = makeHighlightViewer(false);
+        const applyHighlightToFactWrappers = jest.spyOn(viewer, "_applyHighlightToFactWrappers");
+        const groups = viewer._reportSet.namespaceGroups();
+
+        viewer.highlightAllTags(true, groups);
+        viewer.highlightAllTags(false, groups);
+        viewer.highlightAllTags(true, groups);
+
+        expect(applyHighlightToFactWrappers).toHaveBeenCalledTimes(1);
+    });
+
+    test("review mode never prepares node classes", () => {
+        const { viewer } = makeHighlightViewer(true);
+        const applyHighlightToFactWrappers = jest.spyOn(viewer, "_applyHighlightToFactWrappers");
+        const groups = viewer._reportSet.namespaceGroups();
+
+        viewer.highlightAllTags(true, groups);
+        viewer.highlightAllTags(false, groups);
+        viewer.highlightAllTags(true, groups);
+
+        expect(applyHighlightToFactWrappers).not.toHaveBeenCalled();
+    });
+
+    test("toggles highlighting on every report iframe body", () => {
+        const { viewer, doc } = makeHighlightViewer(false);
+        const secondIframe = document.createElement("iframe");
+        document.body.appendChild(secondIframe);
+        viewer._iframes = $([viewer._iframes.get(0), secondIframe]);
+
+        viewer.highlightAllTags(true, viewer._reportSet.namespaceGroups());
+
+        expect(doc.body.classList.contains("ixbrl-highlight-all")).toBe(true);
+        expect(secondIframe.contentDocument.body.classList.contains("ixbrl-highlight-all")).toBe(true);
+
+        viewer.highlightAllTags(false, viewer._reportSet.namespaceGroups());
+
+        expect(doc.body.classList.contains("ixbrl-highlight-all")).toBe(false);
+        expect(secondIframe.contentDocument.body.classList.contains("ixbrl-highlight-all")).toBe(false);
+    });
+
+    test("keeps namespace colors on primary fact wrappers", () => {
+        const f1 = viewerUniqueId(0, "f1");
+        const f2 = viewerUniqueId(0, "f2");
+        const { viewer, doc } = makeHighlightViewer(
+            false,
+            {
+                f1: highlightFact("eg:Concept1"),
+                f2: highlightFact("other:Concept2"),
+            },
+            (reportDoc) => {
+                const first = appendHighlightWrapper(reportDoc);
+                const second = appendHighlightWrapper(reportDoc);
+                return {
+                    [f1]: new IXNode(f1, $(first), 0),
+                    [f2]: new IXNode(f2, $(second), 0),
+                };
+            }
+        );
+
+        viewer.highlightAllTags(true, viewer._reportSet.namespaceGroups());
+
+        const elements = [...doc.querySelectorAll(".ixbrl-element")];
+        expect(elements[0].classList.contains("ixbrl-highlight-0")).toBe(true);
+        expect(elements[1].classList.contains("ixbrl-highlight-1")).toBe(true);
+    });
+
+    test("colors continuation wrappers with their head fact", () => {
+        const f1 = viewerUniqueId(0, "f1");
+        const c1 = viewerUniqueId(0, "c1");
+        const { viewer, doc } = makeHighlightViewer(
+            false,
+            { f1: highlightFact("eg:Concept1") },
+            (reportDoc) => {
+                const headWrapper = appendHighlightWrapper(reportDoc);
+                const continuationWrapper = appendHighlightWrapper(reportDoc);
+                const head = new IXNode(f1, $(headWrapper), 0);
+                const continuation = new IXNode(c1, $(continuationWrapper), 0);
+                head.continuations = [continuation];
+                return { [f1]: head, [c1]: continuation };
+            }
+        );
+        viewer.continuationOfMap = { [c1]: f1 };
+
+        viewer.highlightAllTags(true, viewer._reportSet.namespaceGroups());
+
+        const elements = [...doc.querySelectorAll(".ixbrl-element")];
+        expect(elements[0].classList.contains("ixbrl-highlight-0")).toBe(true);
+        expect(elements[1].classList.contains("ixbrl-highlight-0")).toBe(true);
+    });
+
+    test("prepares each mapped chain node once", () => {
+        const f1 = viewerUniqueId(0, "f1");
+        const f2 = viewerUniqueId(0, "f2");
+        const c1 = viewerUniqueId(0, "c1");
+        const { viewer } = makeHighlightViewer(
+            false,
+            {
+                f1: highlightFact("eg:Concept1"),
+                f2: highlightFact("other:Concept2"),
+            },
+            (reportDoc) => {
+                const first = new IXNode(f1, $(appendHighlightWrapper(reportDoc)), 0);
+                const second = new IXNode(f2, $(appendHighlightWrapper(reportDoc)), 0);
+                const continuation = new IXNode(c1, $(appendHighlightWrapper(reportDoc)), 0);
+                first.continuations = [continuation];
+                second.continuations = [continuation];
+                return { [f1]: first, [f2]: second, [c1]: continuation };
+            }
+        );
+        viewer.continuationOfMap = { [c1]: f1 };
+        const highlightPrimaryWrappers = jest.spyOn(viewer, "_highlightPrimaryWrappers");
+
+        viewer.highlightAllTags(true, viewer._reportSet.namespaceGroups());
+
+        expect(highlightPrimaryWrappers).toHaveBeenCalledTimes(3);
+    });
+
+    test("does not color sub-elements as primary wrappers", () => {
+        const f1 = viewerUniqueId(0, "f1");
+        let subElement;
+        const { viewer, doc } = makeHighlightViewer(
+            false,
+            { f1: highlightFact("eg:Concept1") },
+            (reportDoc) => {
+                const primary = appendHighlightWrapper(reportDoc);
+                subElement = appendHighlightWrapper(reportDoc, "ixbrl-sub-element");
+                return { [f1]: new IXNode(f1, $(primary).add(subElement), 0) };
+            }
+        );
+
+        viewer.highlightAllTags(true, viewer._reportSet.namespaceGroups());
+
+        expect(doc.querySelector(".ixbrl-element").classList.contains("ixbrl-highlight-0")).toBe(true);
+        expect(doc.querySelector(".ixbrl-element").classList.contains("ixbrl-highlight")).toBe(true);
+        expect(subElement.classList.contains("ixbrl-highlight")).toBe(false);
+        expect(subElement.classList.contains("ixbrl-highlight-0")).toBe(false);
+    });
+
+    test("keeps the first namespace color on a double-tagged wrapper", () => {
+        const f1 = viewerUniqueId(0, "f1");
+        const f2 = viewerUniqueId(0, "f2");
+        const { viewer, doc } = makeHighlightViewer(
+            false,
+            {
+                f1: highlightFact("eg:Concept1"),
+                f2: highlightFact("other:Concept2"),
+            },
+            (reportDoc) => {
+                const wrapper = appendHighlightWrapper(reportDoc);
+                const wrappedNode = $(wrapper);
+                return {
+                    [f1]: new IXNode(f1, wrappedNode, 0),
+                    [f2]: new IXNode(f2, wrappedNode, 0),
+                };
+            }
+        );
+
+        viewer.highlightAllTags(true, viewer._reportSet.namespaceGroups());
+
+        const element = doc.querySelector(".ixbrl-element");
+        expect(element.classList.contains("ixbrl-highlight-0")).toBe(true);
+        expect(element.classList.contains("ixbrl-highlight-1")).toBe(false);
+    });
+});
+
+describe("_findOrCreateWrapperNode", () => {
+    afterEach(() => {
+        document.body.innerHTML = "";
+    });
+
+    function appendIXElement(doc, html) {
+        const container = doc.createElement("div");
+        container.innerHTML = html;
+        doc.body.appendChild(container);
+        return container.querySelector("[id]");
+    }
+
+    function appendMarkup(doc, markup) {
+        const host = doc.createElement("div");
+        host.innerHTML = markup;
+        doc.body.appendChild(host);
+        return host;
+    }
+
+    function absolutelyPosition(element) {
+        element.style.position = "absolute";
+        return element;
+    }
+
+    test("wraps an element containing text", () => {
+        const { viewer, doc } = makeHighlightViewer(false);
+        const ixElement = appendIXElement(doc, '<span>Cash: <ix:nonFraction id="f1">123</ix:nonFraction></span>');
+
+        const nodes = viewer._findOrCreateWrapperNode(ixElement, false);
+
+        expect(nodes.length).toBe(1);
+        expect(nodes.get(0)).toBe(ixElement.parentNode);
+        expect(nodes.get(0).tagName).toBe("SPAN");
+        expect(nodes.get(0).classList.contains("ixbrl-element")).toBe(true);
+        expect(nodes.get(0).classList.contains("ixbrl-no-content")).toBe(false);
+    });
+
+    test("uses element children of an element with no text as wrappers", () => {
+        const { viewer, doc } = makeHighlightViewer(false);
+        const ixElement = appendIXElement(doc, '<ix:nonNumeric id="f1"> <p>A</p> <p>B</p> </ix:nonNumeric>');
+
+        const nodes = viewer._findOrCreateWrapperNode(ixElement, false);
+
+        expect(nodes.length).toBe(2);
+        expect(nodes.get(0)).toBe(ixElement.children[0]);
+        expect(nodes.get(1)).toBe(ixElement.children[1]);
+        expect(nodes.get(0).classList.contains("ixbrl-element")).toBe(true);
+    });
+
+    test("wraps an empty element", () => {
+        const { viewer, doc } = makeHighlightViewer(false);
+        const ixElement = appendIXElement(doc, '<span>nil &gt; <ix:nonFraction id="f1"></ix:nonFraction> &lt; nil</span>');
+
+        const nodes = viewer._findOrCreateWrapperNode(ixElement, false);
+
+        expect(nodes.length).toBe(1);
+        expect(nodes.get(0)).toBe(ixElement.parentNode);
+        expect(nodes.get(0).tagName).toBe("SPAN");
+        expect(nodes.get(0).classList.contains("ixbrl-element")).toBe(true);
+        expect(nodes.get(0).classList.contains("ixbrl-no-content")).toBe(true);
+    });
+
+    test("uses the table cell as the wrapper for an empty element that is its only content", () => {
+        const { viewer, doc } = makeHighlightViewer(false);
+        const ixElement = appendIXElement(doc, '<table><tr><td>$ <ix:nonFraction id="f1"></ix:nonFraction></td></tr></table>');
+
+        const nodes = viewer._findOrCreateWrapperNode(ixElement, false);
+
+        expect(nodes.length).toBe(1);
+        expect(nodes.get(0)).toBe(ixElement.parentNode);
+        expect(nodes.get(0).tagName).toBe("TD");
+        expect(nodes.get(0).classList.contains("ixbrl-element")).toBe(true);
+        expect(nodes.get(0).classList.contains("ixbrl-no-content")).toBe(false);
+    });
+
+    test("wraps an empty element in a table cell with other content", () => {
+        const { viewer, doc } = makeHighlightViewer(false);
+        const ixElement = appendIXElement(doc, '<table><tr><td>Cash: <ix:nonFraction id="f1"></ix:nonFraction></td></tr></table>');
+
+        const nodes = viewer._findOrCreateWrapperNode(ixElement, false);
+
+        expect(nodes.length).toBe(1);
+        expect(nodes.get(0)).toBe(ixElement.parentNode);
+        expect(nodes.get(0).tagName).toBe("SPAN");
+        expect(nodes.get(0).classList.contains("ixbrl-element")).toBe(true);
+        expect(nodes.get(0).classList.contains("ixbrl-no-content")).toBe(true);
+    });
+
+    test("returns only the inserted wrapper when no descendant is absolute", () => {
+        const { viewer, doc } = makeHighlightViewer(false);
+        const host = appendMarkup(doc, '<span id="ix">1.0 <b id="child">x</b></span>');
+
+        const nodes = viewer._findOrCreateWrapperNode(host.querySelector("#ix"), false);
+
+        expect(nodes.get().length).toBe(1);
+        expect(nodes.get(0)).toBe(host.querySelector("#ix").parentNode);
+        expect(nodes.get(0).classList.contains("ixbrl-element")).toBe(true);
+        expect(nodes.get(0).classList.contains("ixbrl-contains-absolute")).toBe(false);
+        expect(host.querySelector("#child").classList.contains("ixbrl-sub-element")).toBe(false);
+    });
+
+    test("classes absolute descendants and returns them after their wrapper", () => {
+        const { viewer, doc } = makeHighlightViewer(false);
+        const host = appendMarkup(doc, '<span id="ix">t<i id="a"></i><i id="plain"></i><i id="b"></i></span>');
+        absolutelyPosition(host.querySelector("#a"));
+        absolutelyPosition(host.querySelector("#b"));
+
+        const nodes = viewer._findOrCreateWrapperNode(host.querySelector("#ix"), false);
+
+        expect(nodes.get().map(node => node.id)).toEqual(["", "a", "b"]);
+        expect(nodes.get(0).classList.contains("ixbrl-element")).toBe(true);
+        expect(nodes.get(0).classList.contains("ixbrl-contains-absolute")).toBe(true);
+        expect(nodes.get(1).classList.contains("ixbrl-sub-element")).toBe(true);
+        expect(nodes.get(2).classList.contains("ixbrl-sub-element")).toBe(true);
+        expect(host.querySelector("#plain").classList.contains("ixbrl-sub-element")).toBe(false);
+    });
+
+    test("interleaves each wrapper with its own absolute descendants", () => {
+        const { viewer, doc } = makeHighlightViewer(false);
+        const host = appendMarkup(
+            doc,
+            '<div id="ix"><p id="p1"><i id="a1"></i></p><p id="p2"><i id="a2"></i></p></div>'
+        );
+        absolutelyPosition(host.querySelector("#a1"));
+        absolutelyPosition(host.querySelector("#a2"));
+
+        const nodes = viewer._findOrCreateWrapperNode(host.querySelector("#ix"), false);
+
+        expect(nodes.get().map(node => node.id)).toEqual(["p1", "a1", "p2", "a2"]);
+        expect(nodes.get().map(node => node.classList.contains("ixbrl-element"))).toEqual(
+            [true, false, true, false]
+        );
+        expect(nodes.get().map(node => node.classList.contains("ixbrl-sub-element"))).toEqual(
+            [false, true, false, true]
+        );
+        expect(nodes.get().map(node => node.classList.contains("ixbrl-contains-absolute"))).toEqual(
+            [true, false, true, false]
+        );
+    });
+
+    test("marks only wrappers that contain absolute descendants", () => {
+        const { viewer, doc } = makeHighlightViewer(false);
+        const host = appendMarkup(
+            doc,
+            '<div id="ix"><p id="p1"><i id="a1"></i></p><p id="p2"><i id="plain"></i></p></div>'
+        );
+        absolutelyPosition(host.querySelector("#a1"));
+
+        const nodes = viewer._findOrCreateWrapperNode(host.querySelector("#ix"), false);
+
+        expect(nodes.get().map(node => node.id)).toEqual(["p1", "a1", "p2"]);
+        expect(host.querySelector("#p1").classList.contains("ixbrl-contains-absolute")).toBe(true);
+        expect(host.querySelector("#p2").classList.contains("ixbrl-contains-absolute")).toBe(false);
+    });
+
+    test("returns a hidden element without scanning its descendants", () => {
+        const { viewer, doc } = makeHighlightViewer(false);
+        const host = appendMarkup(doc, '<span id="ix"><i id="a"></i></span>');
+        absolutelyPosition(host.querySelector("#a"));
+
+        const nodes = viewer._findOrCreateWrapperNode(host.querySelector("#ix"), true);
+
+        expect(nodes.get().map(node => node.id)).toEqual(["ix"]);
+        expect(nodes.get(0).classList.contains("ixbrl-element-hidden")).toBe(true);
+        expect(host.querySelector("#a").classList.contains("ixbrl-sub-element")).toBe(false);
+    });
+});
+
+describe("_wrapUntaggedNumbers", () => {
+    afterEach(() => {
+        document.body.innerHTML = "";
+    });
+
+    function wrap(markup) {
+        const { viewer, doc } = makeHighlightViewer(true);
+        const root = doc.createElement("div");
+        root.innerHTML = markup;
+        viewer._wrapUntaggedNumbers(root);
+        return root;
+    }
+
+    test("leaves a text node without a match in place", () => {
+        const { viewer, doc } = makeHighlightViewer(true);
+        const root = doc.createElement("div");
+        root.innerHTML = "just some words";
+        const text = root.firstChild;
+
+        viewer._wrapUntaggedNumbers(root);
+
+        expect(root.firstChild).toBe(text);
+    });
+
+    test("splits text around each match", () => {
+        const root = wrap("Revenue was 1,000 in 2020");
+
+        expect(root.innerHTML).toBe(
+            'Revenue was <span class="review-untagged-number">1,000</span>' +
+            ' in <span class="review-untagged-date">2020</span>'
+        );
+    });
+
+    test("keeps a rejected match in the surrounding text", () => {
+        const root = wrap("abcd topic 37 93 abcd");
+
+        expect(root.innerHTML).toBe(
+            'abcd topic 37 <span class="review-untagged-number">93</span> abcd'
+        );
+        expect(root.childNodes.length).toBe(3);
+    });
+
+    test("treats a nonNumeric whose whole content matches as tagged", () => {
+        const root = wrap("<ix:nonnumeric>2020</ix:nonnumeric>");
+
+        expect(root.innerHTML).toBe("<ix:nonnumeric>2020</ix:nonnumeric>");
+    });
+
+    test("wraps a match inside a nonNumeric with other content", () => {
+        const root = wrap("<ix:nonnumeric>in 2020</ix:nonnumeric>");
+
+        expect(root.innerHTML).toBe(
+            '<ix:nonnumeric>in <span class="review-untagged-date">2020</span></ix:nonnumeric>'
+        );
+    });
+
+    test("treats a nonNumeric whose value is inside markup as tagged", () => {
+        const root = wrap("<ix:nonnumeric><span>2020</span></ix:nonnumeric>");
+
+        expect(root.innerHTML).toBe("<ix:nonnumeric><span>2020</span></ix:nonnumeric>");
+    });
+
+    test("treats a nonNumeric whose value spans text nodes as tagged", () => {
+        const root = wrap("<ix:nonnumeric><b>April</b> 30, 2022</ix:nonnumeric>");
+
+        expect(root.innerHTML).toBe("<ix:nonnumeric><b>April</b> 30, 2022</ix:nonnumeric>");
+    });
+
+    test("treats a nonNumeric whose value has surrounding whitespace as tagged", () => {
+        const root = wrap("<ix:nonnumeric> 2020 </ix:nonnumeric>");
+
+        expect(root.innerHTML).toBe("<ix:nonnumeric> 2020 </ix:nonnumeric>");
+    });
+
+    test("wraps a match inside markup in a nonNumeric text block", () => {
+        const root = wrap("<ix:nonnumeric>Revenue was <span>1,000</span> this year.</ix:nonnumeric>");
+
+        expect(root.innerHTML).toBe(
+            '<ix:nonnumeric>Revenue was <span><span class="review-untagged-number">1,000</span></span> this year.</ix:nonnumeric>'
+        );
+    });
+
+    test("checks a nonNumeric nested in a text block on its own", () => {
+        const root = wrap("<ix:nonnumeric>Revenue in <ix:nonnumeric>2020</ix:nonnumeric> was 1,000.</ix:nonnumeric>");
+
+        expect(root.innerHTML).toBe(
+            '<ix:nonnumeric>Revenue in <ix:nonnumeric>2020</ix:nonnumeric>' +
+            ' was <span class="review-untagged-number">1,000</span>.</ix:nonnumeric>'
+        );
+    });
+});

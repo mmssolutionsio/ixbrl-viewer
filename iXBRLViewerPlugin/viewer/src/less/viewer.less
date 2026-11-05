@@ -17,12 +17,13 @@
   --colour-primary: @colour-primary;
   --colour-secondary: @colour-secondary;
   --colour-related-fact: @colour-related-fact;
+  --highlight-outline-weight: 0.19em;
 }
 
 // To ensure highlighting takes place, !important is used to override inline styles.
 // For example: overrides highlighting applied inline to alternate table rows.
 
-.ixbrl-highlight {
+body.ixbrl-highlight-all .ixbrl-highlight {
   &:not(.ixbrl-no-highlight),
   & .ixbrl-sub-element:not(.ixbrl-no-highlight) {
       background-color: var(--colour-highlight-default) !important; // Override inline styles
@@ -62,17 +63,9 @@
   background-color: var(--colour-highlight-2);
 }
 
-.review .ixbrl-highlight {
-  &:not(.ixbrl-no-highlight).ixbrl-highlight-1, 
-  &:not(.ixbrl-no-highlight).ixbrl-highlight-2, 
-  &:not(.ixbrl-no-highlight).ixbrl-highlight-3, 
-  &:not(.ixbrl-no-highlight).ixbrl-highlight-4, 
-  &:not(.ixbrl-no-highlight).ixbrl-highlight-5, 
-  &.ixbrl-highlight-1 .ixbrl-sub-element:not(.ixbrl-no-highlight),
-  &.ixbrl-highlight-2 .ixbrl-sub-element:not(.ixbrl-no-highlight),
-  &.ixbrl-highlight-3 .ixbrl-sub-element:not(.ixbrl-no-highlight),
-  &.ixbrl-highlight-4 .ixbrl-sub-element:not(.ixbrl-no-highlight),
-  &.ixbrl-highlight-5 .ixbrl-sub-element:not(.ixbrl-no-highlight) {
+.review.ixbrl-highlight-all {
+  .ixbrl-element:not(.ixbrl-no-highlight),
+  .ixbrl-sub-element:not(.ixbrl-no-highlight) {
     background-color: var(--colour-highlight-default) !important; // Override inline styles
   }
 
@@ -82,7 +75,7 @@
 .ixbrl-related {
   &:not(.ixbrl-no-highlight),
   .ixbrl-sub-element:not(.ixbrl-no-highlight) {
-    outline: solid 0.125em var(--colour-related-fact);
+    outline: solid var(--highlight-outline-weight) var(--colour-related-fact);
     outline-offset: 0.0625em;
 
     td&, th& {
@@ -95,7 +88,7 @@
 .ixbrl-linked-highlight {
   &:not(.ixbrl-no-highlight),
   .ixbrl-sub-element:not(.ixbrl-no-highlight) {
-    outline: dashed 0.125em var(--colour-linked-fact);
+    outline: dashed var(--highlight-outline-weight) var(--colour-linked-fact);
     outline-offset: 0.0625em;
 
     td&, th& {
@@ -106,15 +99,18 @@
 
 // Apply dashed outline to iXBRL elements on hover
 // Should override previous rule
-.ixbrl-element:not(.ixbrl-no-highlight),
-.ixbrl-sub-element:not(.ixbrl-no-highlight) {
-  &:hover {
-    outline: dashed 0.125em var(--colour-primary-focus);
-    outline-offset: 0.0625em;
-    cursor: pointer;
+// Touch screens have no hover, and a tap would leave the outline stuck
+@media (hover: hover) {
+  .ixbrl-element:not(.ixbrl-no-highlight),
+  .ixbrl-sub-element:not(.ixbrl-no-highlight) {
+    &:hover {
+      outline: dashed 0.1875em var(--colour-primary-focus);
+      outline-offset: 0.0625em;
+      cursor: pointer;
 
-    td&, th& {
-      outline-offset: -0.0625em;
+      td&, th& {
+        outline-offset: -0.0625em;
+      }
     }
   }
 }
@@ -127,13 +123,38 @@
     // elements don't get a dashed line on hover
     &,
     &:hover {
-      outline: solid 0.125em var(--colour-primary-focus);
+      outline: solid var(--highlight-outline-weight) var(--colour-primary-focus);
       outline-offset: 0.0625em;
 
       td&, th& {
         outline-offset: -0.0625em;
       }
     }
+  }
+}
+
+// Empty elements (e.g. nil facts) have no content, so their wrapper has zero
+// width. The highlight background has no area, the outline collapses to a
+// hairline, and there is nothing to hover or click.  Push the outline out to
+// form a small box, and fill the box with an absolutely positioned
+// pseudo element.  The pseudo element takes no space in the document flow, so
+// the layout of the document is unchanged.  It inherits the wrapper's
+// highlight background, and provides the hit area for hover and click.
+@no-content-marker-inset: 0.2em;
+
+.ixbrl-no-content:not(.ixbrl-no-highlight) {
+  position: relative;
+
+  &::after {
+    content: "";
+    position: absolute;
+    inset: -@no-content-marker-inset;
+    background-color: inherit;
+  }
+
+  &,
+  &:hover {
+    outline-offset: @no-content-marker-inset;
   }
 }
 
